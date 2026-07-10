@@ -7,6 +7,8 @@
   <arg name="stand_on_start" default="true"/>   <!-- 시작 시 다리 펴고 서기 -->
   <arg name="max_speed_x" default="12.0"/>      <!-- 최대 전진 속도 cm/s (부드럽게: 8~12 권장) -->
   <arg name="max_yaw_rate_deg" default="16.0"/> <!-- 최대 회전 속도 deg/s -->
+  <arg name="turn_forward_bias" default="0.0"/> <!-- 제자리 회전 시 뒤로 밀리면 1.0~2.5 -->
+  <arg name="speed_step" default="1.0"/>        <!-- 속도 양자화 폭. 흔들리면 2~3 시도 -->
   <arg name="image_topic" default=""/>          <!-- '' = 압축 영상 토픽 자동 탐지 -->
 
   <node name="vr_udp_teleop" pkg="puppy_vr_control_noetic" type="vr_udp_teleop.py" output="screen">
@@ -14,6 +16,8 @@
     <param name="stand_on_start" value="$(arg stand_on_start)"/>
     <param name="max_speed_x" value="$(arg max_speed_x)"/>
     <param name="max_yaw_rate_deg" value="$(arg max_yaw_rate_deg)"/>
+    <param name="turn_forward_bias" value="$(arg turn_forward_bias)"/>
+    <param name="speed_step" value="$(arg speed_step)"/>
   </node>
 
   <node if="$(arg use_camera)" name="camera_udp_sender" pkg="puppy_vr_control_noetic"

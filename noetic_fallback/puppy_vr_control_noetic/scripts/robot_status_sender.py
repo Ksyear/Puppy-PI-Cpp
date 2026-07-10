@@ -20,6 +20,7 @@ import time
 import rospy
 
 from std_msgs.msg import Float32, UInt16
+from puppy_control.msg import Velocity
 
 
 class RobotStatusSender(object):
@@ -33,9 +34,20 @@ class RobotStatusSender(object):
         self.send_period = rospy.get_param('~send_period', 1.0)
         self.client_timeout_sec = rospy.get_param('~client_timeout_sec', 5.0)
         self.wireless_if = rospy.get_param('~wireless_if', 'wlan0')
+        # 저전압 보호: 이 값(mV) 이하로 떨어지면 이동을 강제 정지 (0 = 비활성)
+        # 6.8V 미만은 리튬 배터리 손상 위험 (Hiwonder 문서 기준)
+        self.low_battery_mv = rospy.get_param('~low_battery_mv', 6800)
+        # 확장보드 I2C 직접 읽기 (sensor_control.py 와 동일: bus1, 0x7A, reg0)
+        self.i2c_bus = rospy.get_param('~i2c_bus', 1)
+        self.i2c_addr = rospy.get_param('~i2c_addr', 0x7A)
+        self.i2c_reg = rospy.get_param('~i2c_reg', 0)
+        self.low_latched = False
         # ''(기본값) = 자동 탐지: 이름에 bat/volt/power 가 들어간 std_msgs 토픽을 찾는다
         battery_topic = rospy.get_param('~battery_topic', '')
         battery_type = rospy.get_param('~battery_type', 'uint16')  # 'uint16'(mV) | 'float32'(V)
+
+        self.velocity_pub = rospy.Publisher(
+            '/puppy_control/velocity/autogait', Velocity, queue_size=1)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -68,8 +80,29 @@ class RobotStatusSender(object):
         rospy.Timer(rospy.Duration(self.send_period), self.send_status)
         rospy.loginfo('상태 전송 대기(ROS1): UDP %d (배터리=%s)', self.bind_port, battery_topic)
 
+    def read_battery_i2c(self):
+        """확장보드 ADC 에서 배터리 전압(mV) 직접 읽기.
+        원본: /home/pi/puppy_pi/src/sensor/scripts/sensor_control.py 의 getBattery()
+        I2C 는 커널이 트랜잭션 단위로 직렬화하므로 별도 프로세스에서 읽어도 안전."""
+        try:
+            from smbus2 import SMBus, i2c_msg
+        except ImportError:
+            return None
+        try:
+            with SMBus(self.i2c_bus) as bus:
+                msg = i2c_msg.write(self.i2c_addr, [self.i2c_reg])
+                bus.i2c_rdwr(msg)
+                read = i2c_msg.read(self.i2c_addr, 2)
+                bus.i2c_rdwr(read)
+                mv = int.from_bytes(bytes(list(read)), 'little')
+        except Exception:
+            return None
+        if 400 <= mv <= 1300:      # 단위가 cV(센티볼트)인 보드 변형 대응
+            mv *= 10
+        return mv if 4000 <= mv <= 13000 else None   # 말도 안 되는 값은 버림
+
     def autodetect_battery(self):
-        """이름에 bat/volt/power 가 들어간 std_msgs 숫자 토픽을 찾아 구독."""
+        """1순위: bat/volt 이름의 토픽 자동 감지. 없으면 2순위: I2C 직접 읽기."""
         import std_msgs.msg as std_msg_mod
         while self.running and not rospy.is_shutdown():
             try:
@@ -87,9 +120,20 @@ class RobotStatusSender(object):
                     rospy.Subscriber(topic, cls, self.any_battery_cb)
                     rospy.loginfo('배터리 토픽 자동 감지: %s (%s)', topic, ty)
                     return
+
+            mv = self.read_battery_i2c()
+            if mv is not None:
+                rospy.loginfo('배터리 I2C 직접 읽기 사용 (bus%d, 0x%02X): 현재 %.2fV',
+                              self.i2c_bus, self.i2c_addr, mv / 1000.0)
+                while self.running and not rospy.is_shutdown():
+                    mv = self.read_battery_i2c()
+                    if mv is not None:
+                        self.set_battery(mv)
+                    time.sleep(2.0)
+                return
+
             rospy.logwarn_throttle(
-                15, '배터리 토픽 자동 탐지 실패 — 로봇에서 확인: rostopic list | grep -iE "bat|volt"\n'
-                '  찾으면 실행 시 지정: run_vr.sh 대신 _battery_topic:=<토픽> 파라미터 사용')
+                15, '배터리를 못 찾음 (토픽 없음 + I2C 읽기 실패) — smbus2 설치 여부 확인: pip3 install smbus2')
             time.sleep(3)
 
     def any_battery_cb(self, m):
@@ -139,8 +183,19 @@ class RobotStatusSender(object):
             return
         bat_age = -1.0 if self.battery_mv < 0 else now - self.last_battery
         uptime = int(now - self.start_time)
-        msg = 'BAT:%d;BAT_AGE:%.1f;RSSI:%d;UP:%d' % (
-            self.battery_mv, bat_age, self.read_rssi(), uptime)
+
+        # ── 저전압 보호: 임계값 이하면 1초마다 정지 명령을 덮어써 주행을 막는다 ──
+        if self.low_battery_mv > 0 and 0 < self.battery_mv <= self.low_battery_mv:
+            if not self.low_latched:
+                rospy.logerr('배터리 위험 %.2fV ≤ %.2fV — 보호 정지 활성, 즉시 충전!',
+                             self.battery_mv / 1000.0, self.low_battery_mv / 1000.0)
+                self.low_latched = True
+            self.velocity_pub.publish(Velocity(x=0.0, y=0.0, yaw_rate=0.0))
+        elif self.low_latched and self.battery_mv > self.low_battery_mv + 200:
+            self.low_latched = False   # 0.2V 여유를 두고 해제 (경계값 떨림 방지)
+
+        msg = 'BAT:%d;BAT_AGE:%.1f;RSSI:%d;UP:%d;LOW:%d' % (
+            self.battery_mv, bat_age, self.read_rssi(), uptime, 1 if self.low_latched else 0)
         try:
             self.sock.sendto(msg.encode(), dest)
         except OSError:

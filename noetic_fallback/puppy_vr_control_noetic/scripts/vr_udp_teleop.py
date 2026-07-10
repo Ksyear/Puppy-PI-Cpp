@@ -57,6 +57,8 @@ class VrUdpTeleop(object):
         self.speed_step = rospy.get_param('~speed_step', 1.0)
         self.yaw_step_deg = rospy.get_param('~yaw_step_deg', 2.0)
         self.heartbeat_sec = rospy.get_param('~heartbeat_sec', 0.5)
+        # 제자리 회전 시 로봇이 뒤로 밀리면 1.0~2.5 정도로 (cm/s, 회전 중 전진 보정)
+        self.turn_forward_bias = rospy.get_param('~turn_forward_bias', 0.0)
         self.debug = rospy.get_param('~debug', False)
 
         self.velocity_pub = rospy.Publisher(self.velocity_topic, Velocity, queue_size=1)
@@ -201,6 +203,10 @@ class VrUdpTeleop(object):
                 self.publish_stop()
                 self.moving = False
             return
+
+        # 제자리 회전 보정: 회전만 할 때 뒤로 밀리는 것을 전진 성분으로 상쇄
+        if vx == 0.0 and vyaw != 0.0 and self.turn_forward_bias != 0.0:
+            vx = float(self.turn_forward_bias)
 
         if vx != self.last_vx or vyaw != self.last_vyaw or now - self.last_pub >= self.heartbeat_sec:
             self.velocity_pub.publish(Velocity(x=vx, y=0.0, yaw_rate=vyaw))
