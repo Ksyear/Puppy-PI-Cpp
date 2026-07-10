@@ -1,0 +1,51 @@
+# puppy_vr_control 파라미터
+# Unity 쪽 UDP_Joystick_Sender.cs / PuppyPi_MR_Controller 프로토콜과 맞춰져 있음
+
+vr_udp_teleop:
+  ros__parameters:
+    # ── 수신 설정 ──
+    port: 5005                 # Unity UDP_Joystick_Sender 의 port 와 동일해야 함
+    recv_timeout_sec: 1.0      # 이 시간 동안 패킷 없으면 안전 정지
+
+    # ── 각도 → 속도 변환 (원본 udp_joystick_receiver.py 와 동일 규칙) ──
+    deadzone_deg: 5.0          # 이 각도(±) 이내는 중립 처리 (손떨림 무시)
+    max_angle_deg: 45.0        # 이 각도에서 최대 속도 (그 이상 기울여도 100%)
+
+    # ── PuppyPi 속도 한계 ──
+    # 공식 조이스틱 노드 기본값과 동일. puppy_control 의 허용 한계는 x<=35, yaw<=51°
+    max_speed_x: 15.0          # 전진/후진 최대 속도 (cm/s 스케일)
+    max_yaw_rate_deg: 20.0     # 회전 최대 속도 (deg/s)
+
+    # ── 방향이 실기기에서 반대로 나오면 여기를 뒤집을 것 ──
+    invert_forward: false
+    invert_turn: true
+
+    # ── 발행 설정 ──
+    velocity_topic: /puppy_control/velocity/autogait
+    publish_rate: 20.0         # 제어 루프 주기 (Hz)
+    speed_step: 1.0            # 속도 양자화 폭 (cm/s) — gait 재계산 억제
+    yaw_step_deg: 2.0          # 회전 양자화 폭 (deg/s)
+    heartbeat_sec: 0.5         # 같은 명령이라도 이 주기로 재발행
+    debug: false
+
+robot_status_sender:
+  ros__parameters:
+    bind_port: 5007            # Quest 가 hello 를 보내고 상태를 받는 포트
+    client_ip: ""              # 비우면 hello 자동 발견
+    client_port: 5007
+    send_period: 1.0           # 상태 전송 주기 (초)
+    client_timeout_sec: 5.0
+    wireless_if: wlan0         # Wi-Fi RSSI 를 읽을 인터페이스
+    battery_topic: /ros_robot_controller/battery
+
+camera_udp_sender:
+  ros__parameters:
+    image_topic: /image_raw/compressed   # usb_cam 이 발행하는 JPEG 토픽
+    # client_ip 를 비우면 자동 발견 모드:
+    # Quest 가 bind_port 로 아무 패킷("hello")을 보내면 그 주소로 스트리밍 시작
+    client_ip: ""
+    client_port: 5006          # client_ip 지정 시 목적지 포트
+    bind_port: 5006            # hello 수신 포트
+    max_fps: 15.0              # Wi-Fi 대역폭 보호용 프레임 제한
+    chunk_size: 1400           # MTU(1500) 이하로 유지할 것
+    client_timeout_sec: 5.0    # hello 가 이 시간 동안 없으면 전송 중단

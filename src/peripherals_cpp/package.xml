@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>peripherals_cpp</name>
+  <version>0.1.0</version>
+  <description>
+    peripherals 파이썬 노드들의 C++ 이식판 — 게임패드 원격조종(remote_control_joystick),
+    키보드 텔레옵(teleop_key_control), IMU TF 브로드캐스터(tf_broadcaster_imu).
+  </description>
+  <maintainer email="ksyear@users.noreply.github.com">Ksyear</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>tf2_ros</depend>
+  <depend>puppy_control_msgs</depend>
+  <depend>ros_robot_controller_msgs</depend>
+
+  <exec_depend>ros2launch</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

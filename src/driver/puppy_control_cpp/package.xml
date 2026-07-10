@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>puppy_control_cpp</name>
+  <version>0.1.0</version>
+  <description>
+    puppy_control(파이썬)의 C++ 이식판 — ROS 래퍼(토픽/서비스/IMU 필터/명령 검증) 완전 이식.
+    보행·IK 엔진(HiwonderPuppy)은 로봇 내부 /home/ubuntu/software/puppypi_control 에만 있어
+    PuppyEngine 인터페이스 뒤로 분리했고, 해당 파일 확보 후 stub_engine.cpp 를 채우면 완성된다.
+  </description>
+  <maintainer email="ksyear@users.noreply.github.com">Ksyear</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>puppy_control_msgs</depend>
+  <depend>ros_robot_controller_msgs</depend>
+
+  <exec_depend>ros2launch</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,17 @@
+<launch>
+  <!-- [비상용 3안] ROS1 Noetic 이미지에서 VR 조종+영상+상태 전송 -->
+  <!-- 사전 조건: 로봇 기본 노드(puppy_control 등, 부팅 자동실행) + 카메라:
+       roslaunch puppy_bringup usb_cam.launch -->
+  <arg name="use_camera" default="true"/>
+  <arg name="debug" default="false"/>
+
+  <node name="vr_udp_teleop" pkg="puppy_vr_control_noetic" type="vr_udp_teleop.py" output="screen">
+    <param name="debug" value="$(arg debug)"/>
+  </node>
+
+  <node if="$(arg use_camera)" name="camera_udp_sender" pkg="puppy_vr_control_noetic"
+        type="camera_udp_sender.py" output="screen"/>
+
+  <node name="robot_status_sender" pkg="puppy_vr_control_noetic"
+        type="robot_status_sender.py" output="screen"/>
+</launch>

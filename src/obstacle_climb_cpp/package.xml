@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>obstacle_climb_cpp</name>
+  <version>0.1.0</version>
+  <description>
+    OpenCV 로 전방 장애물(계단/턱)을 색인식으로 감지하고, 정면 정렬 후
+    다리 동작 그룹(runActionGroup)으로 넘어가는 노드.
+    공식 negotiate_stairs_demo.py 의 C++ 이식 + 정렬/안전정지 개선판.
+  </description>
+  <maintainer email="ksyear@users.noreply.github.com">Ksyear</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>std_srvs</depend>
+  <depend>puppy_control_msgs</depend>
+  <depend>libopencv-dev</depend>
+
+  <exec_depend>ros2launch</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

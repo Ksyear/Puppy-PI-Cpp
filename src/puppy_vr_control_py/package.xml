@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>puppy_vr_control_py</name>
+  <version>0.1.0</version>
+  <description>
+    puppy_vr_control(C++)의 파이썬 버전.
+    파이썬 스택으로 로봇을 돌릴 때 VR(Meta Quest)과 UDP 통신해 조종하기 위한 노드 모음.
+    프로토콜/파라미터/동작은 C++판과 완전히 동일하다.
+  </description>
+  <maintainer email="ksyear@users.noreply.github.com">Ksyear</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>puppy_control_msgs</depend>
+
+  <exec_depend>ros2launch</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>ros_robot_controller_cpp</name>
+  <version>0.1.0</version>
+  <description>
+    ros_robot_controller(파이썬)의 C++ 이식판 — STM32 확장보드 시리얼 드라이버.
+    토픽/서비스/스케일링이 원본과 동일한 드롭인 교체. 시리얼 프로토콜 바이트는
+    파이썬 SDK 와의 대조 테스트로 검증됨.
+  </description>
+  <maintainer email="ksyear@users.noreply.github.com">Ksyear</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>ros_robot_controller_msgs</depend>
+
+  <exec_depend>ros2launch</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

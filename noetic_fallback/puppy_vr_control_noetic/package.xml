@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>puppy_vr_control_noetic</name>
+  <version>0.1.0</version>
+  <description>
+    [비상용 3안] ROS1 Noetic 이미지에서 VR(Meta Quest) 조종/영상/상태 전송을
+    돌리기 위한 rospy 노드. UDP 프로토콜(5005/5006/5007)은 ROS2판과 완전히 동일 —
+    Unity 앱은 어느 쪽인지 구분하지 못한다.
+    ROS2 환경(2안)이 준비되면 이 폴더는 쓰지 않는다.
+  </description>
+  <maintainer email="ksyear@users.noreply.github.com">Ksyear</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>puppy_control</depend>
+</package>
