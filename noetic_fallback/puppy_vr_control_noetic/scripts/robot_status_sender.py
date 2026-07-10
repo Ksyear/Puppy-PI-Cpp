@@ -86,7 +86,8 @@ class RobotStatusSender(object):
         I2C 는 커널이 트랜잭션 단위로 직렬화하므로 별도 프로세스에서 읽어도 안전."""
         try:
             from smbus2 import SMBus, i2c_msg
-        except ImportError:
+        except ImportError as e:
+            self._i2c_fail('smbus2 모듈 없음(%s) — 해결: pip3 install smbus2' % e)
             return None
         try:
             with SMBus(self.i2c_bus) as bus:
@@ -95,16 +96,35 @@ class RobotStatusSender(object):
                 read = i2c_msg.read(self.i2c_addr, 2)
                 bus.i2c_rdwr(read)
                 mv = int.from_bytes(bytes(list(read)), 'little')
-        except Exception:
+        except PermissionError as e:
+            self._i2c_fail('I2C 권한 없음(%s) — 해결: sudo usermod -aG i2c pi 후 재로그인' % e)
+            return None
+        except Exception as e:
+            self._i2c_fail('I2C 읽기 오류: %r (주소/버스 확인: i2cdetect -y %d)' % (e, self.i2c_bus))
             return None
         if 400 <= mv <= 1300:      # 단위가 cV(센티볼트)인 보드 변형 대응
             mv *= 10
         return mv if 4000 <= mv <= 13000 else None   # 말도 안 되는 값은 버림
 
+    def _i2c_fail(self, msg):
+        # 같은 오류는 한 번만 출력 (원인이 로그에 정확히 남도록)
+        if msg != getattr(self, '_last_i2c_err', None):
+            self._last_i2c_err = msg
+            rospy.logwarn('배터리 I2C: %s', msg)
+
     def autodetect_battery(self):
-        """1순위: bat/volt 이름의 토픽 자동 감지. 없으면 2순위: I2C 직접 읽기."""
+        """1순위: bat/volt 토픽 자동 감지 → 2순위: I2C 직접 읽기 → 둘 다 없으면 포기.
+        (PuppyPi RasAdapter 보드는 전압 ADC가 FND 표시용 MCU 에만 연결되어 있어
+         라즈베리파이에서 읽을 수 없음을 실기기 I2C 스캔으로 확인 — 0x68(IMU)만 존재.
+         저전압은 보드 자체 부저 경고 + 뒷면 FND 육안 확인으로 대체)"""
         import std_msgs.msg as std_msg_mod
+        rounds = 0
         while self.running and not rospy.is_shutdown():
+            rounds += 1
+            if rounds > 10:   # 약 30초 시도 후 결론
+                rospy.loginfo('배터리 데이터 소스 없음 — 이 보드는 소프트웨어로 전압을 읽을 수 없는 구조. '
+                              '배터리 표시 비활성 (뒷면 FND 숫자로 육안 확인, 저전압은 보드가 자체 경고음)')
+                return
             try:
                 topics = rospy.get_published_topics()
             except Exception:

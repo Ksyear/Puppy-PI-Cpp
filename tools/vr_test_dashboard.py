@@ -364,6 +364,10 @@ class Dashboard:
             else:
                 screen.blit(big.render('DRIVING ENABLED', True, (90, 220, 120)), (660, 20))
 
+            # 로봇 쪽 저전압 보호가 발동하면 최우선으로 경고
+            if status.get('LOW') == '1':
+                screen.blit(big.render('LOW BATTERY - CHARGE NOW!', True, (255, 70, 70)), (660, 52))
+
             pygame.display.flip()
 
         # 종료: 정지 패킷을 확실히 보내고 소켓 정리

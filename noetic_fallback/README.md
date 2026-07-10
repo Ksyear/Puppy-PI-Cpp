@@ -90,6 +90,17 @@ python3 -c "import socket;socket.socket(socket.AF_INET,socket.SOCK_DGRAM).sendto
 python3 -c "import socket;socket.socket(socket.AF_INET,socket.SOCK_DGRAM).sendto(b'ESTOP',('<로봇IP>',5005))"
 ```
 
+## 배터리 표시에 대한 결론 (실기기 확인 완료)
+
+이 로봇(ROS1 이미지 + RasAdapter 보드)은 **배터리 전압을 소프트웨어로 읽을 수 없다**:
+토픽/서비스 없음, I2C 스캔 결과 0x68(MPU6050 IMU)만 존재 — 전압 ADC는 뒷면
+FND(숫자 표시) 전용 MCU 에만 연결. `sensor_control.py` 의 getBattery()(0x7A)는
+다른 제품용 SDK 잔재로 이 보드에서는 Errno 121.
+→ 대시보드의 BATTERY 는 `--` 로 표시되며, 배터리 확인은 **뒷면 FND 육안**,
+저전압 경고는 **보드 자체 부저**(6.8V 미만)가 담당한다. 노드는 30초 탐지 후
+조용히 포기하므로 로그를 오염시키지 않는다.
+(ROS2 이미지/신형 보드로 전환하면 `/ros_robot_controller/battery` 토픽으로 자동 연결됨)
+
 ## 확인이 필요한 것 (이미지 버전에 따라 다를 수 있음)
 
 1. **배터리 토픽**: `rostopic list | grep -i bat` 로 이름 확인 →
