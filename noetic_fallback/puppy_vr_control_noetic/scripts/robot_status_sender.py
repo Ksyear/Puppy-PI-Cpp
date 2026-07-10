@@ -12,6 +12,7 @@ ROS2판과 동일한 상태 전송 프로토콜 (UDP 5007, hello 자동 발견, 
 후 ~battery_topic / ~battery_type 파라미터로 맞출 것.
 """
 
+import re
 import socket
 import threading
 import time
@@ -32,7 +33,8 @@ class RobotStatusSender(object):
         self.send_period = rospy.get_param('~send_period', 1.0)
         self.client_timeout_sec = rospy.get_param('~client_timeout_sec', 5.0)
         self.wireless_if = rospy.get_param('~wireless_if', 'wlan0')
-        battery_topic = rospy.get_param('~battery_topic', '/ros_robot_controller/battery')
+        # ''(기본값) = 자동 탐지: 이름에 bat/volt/power 가 들어간 std_msgs 토픽을 찾는다
+        battery_topic = rospy.get_param('~battery_topic', '')
         battery_type = rospy.get_param('~battery_type', 'uint16')  # 'uint16'(mV) | 'float32'(V)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -53,15 +55,50 @@ class RobotStatusSender(object):
         else:
             threading.Thread(target=self.hello_loop, daemon=True).start()
 
-        if battery_type == 'float32':
-            rospy.Subscriber(battery_topic, Float32,
-                             lambda m: self.set_battery(int(m.data * 1000)))  # V -> mV
+        if battery_topic:
+            if battery_type == 'float32':
+                rospy.Subscriber(battery_topic, Float32,
+                                 lambda m: self.set_battery(int(m.data * 1000)))  # V -> mV
+            else:
+                rospy.Subscriber(battery_topic, UInt16, lambda m: self.set_battery(int(m.data)))
         else:
-            rospy.Subscriber(battery_topic, UInt16, lambda m: self.set_battery(int(m.data)))
+            threading.Thread(target=self.autodetect_battery, daemon=True).start()
 
         rospy.on_shutdown(self.shutdown)
         rospy.Timer(rospy.Duration(self.send_period), self.send_status)
         rospy.loginfo('상태 전송 대기(ROS1): UDP %d (배터리=%s)', self.bind_port, battery_topic)
+
+    def autodetect_battery(self):
+        """이름에 bat/volt/power 가 들어간 std_msgs 숫자 토픽을 찾아 구독."""
+        import std_msgs.msg as std_msg_mod
+        while self.running and not rospy.is_shutdown():
+            try:
+                topics = rospy.get_published_topics()
+            except Exception:
+                time.sleep(3)
+                continue
+            cands = [(t, ty) for t, ty in topics
+                     if re.search(r'bat|volt|power', t, re.I) and ty.startswith('std_msgs/')]
+            if cands:
+                cands.sort(key=lambda x: ('bat' not in x[0].lower(), len(x[0])))
+                topic, ty = cands[0]
+                cls = getattr(std_msg_mod, ty.split('/')[1], None)
+                if cls is not None:
+                    rospy.Subscriber(topic, cls, self.any_battery_cb)
+                    rospy.loginfo('배터리 토픽 자동 감지: %s (%s)', topic, ty)
+                    return
+            rospy.logwarn_throttle(
+                15, '배터리 토픽 자동 탐지 실패 — 로봇에서 확인: rostopic list | grep -iE "bat|volt"\n'
+                '  찾으면 실행 시 지정: run_vr.sh 대신 _battery_topic:=<토픽> 파라미터 사용')
+            time.sleep(3)
+
+    def any_battery_cb(self, m):
+        """타입 불문 숫자 → mV 로 정규화 (100 미만이면 V 단위로 간주)."""
+        try:
+            v = float(getattr(m, 'data', -1))
+        except (TypeError, ValueError):
+            return
+        self.set_battery(int(v * 1000) if 0 < v < 100 else int(v))
 
     def set_battery(self, mv):
         self.battery_mv = mv

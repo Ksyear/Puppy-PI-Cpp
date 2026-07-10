@@ -11,8 +11,16 @@
 set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# ROS1 환경 (이미 .bashrc 에서 source 됐어도 무해)
-source /opt/ros/noetic/setup.bash 2>/dev/null || true
+# ROS 환경: 이미 잡혀 있으면 절대 다시 source 하지 않는다!
+# (기본 setup.bash 를 다시 source 하면 로봇 워크스페이스 오버레이가 지워져
+#  puppy_control 메시지 import 가 실패한다 — 실제로 겪은 버그)
+if [ -z "${ROS_DISTRO:-}" ]; then
+  source /opt/ros/noetic/setup.bash
+  # 로봇 워크스페이스(devel/setup.bash)가 있으면 오버레이
+  for ws in "$HOME"/*/devel/setup.bash; do
+    [ -f "$ws" ] && source "$ws" && break
+  done
+fi
 
 export ROS_PACKAGE_PATH="$ROS_PACKAGE_PATH:$DIR"
 chmod +x "$DIR/puppy_vr_control_noetic/scripts/"*.py
