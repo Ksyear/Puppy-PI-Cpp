@@ -42,6 +42,7 @@
 #include "puppy_control_msgs/msg/velocity.hpp"
 #include "puppy_vr_control/vr_teleop_logic.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "std_srvs/srv/empty.hpp"
 
 using namespace std::chrono_literals;
 using Velocity = puppy_control_msgs::msg::Velocity;
@@ -99,6 +100,23 @@ public:
     timer_ = create_wall_timer(
       std::chrono::duration_cast<std::chrono::nanoseconds>(period),
       std::bind(&VrUdpTeleop::control_tick, this));
+
+    // 시작 시 서기 자세 (go_home) — 엎드린 채 시작하지 않도록
+    if (declare_parameter<bool>("stand_on_start", true)) {
+      go_home_client_ = create_client<std_srvs::srv::Empty>("/puppy_control/go_home");
+      stand_timer_ = create_wall_timer(
+        1s, [this]() {
+          if (go_home_client_->service_is_ready()) {
+            go_home_client_->async_send_request(
+              std::make_shared<std_srvs::srv::Empty::Request>());
+            RCLCPP_INFO(get_logger(), "시작 자세: go_home(서기) 호출");
+            stand_timer_->cancel();
+          } else if (++stand_tries_ > 15) {
+            RCLCPP_WARN(get_logger(), "go_home 서비스 없음 — 서기 자세 생략");
+            stand_timer_->cancel();
+          }
+        });
+    }
 
     RCLCPP_INFO(
       get_logger(),
@@ -355,6 +373,9 @@ private:
 
   rclcpp::Publisher<Velocity>::SharedPtr velocity_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::Client<std_srvs::srv::Empty>::SharedPtr go_home_client_;
+  rclcpp::TimerBase::SharedPtr stand_timer_;
+  int stand_tries_{0};
 };
 
 int main(int argc, char ** argv)

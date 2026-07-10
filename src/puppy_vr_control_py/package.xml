@@ -12,6 +12,7 @@
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
+  <depend>std_srvs</depend>
   <depend>sensor_msgs</depend>
   <depend>puppy_control_msgs</depend>
 

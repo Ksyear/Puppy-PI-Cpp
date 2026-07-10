@@ -31,6 +31,7 @@ import rclpy
 from rclpy.node import Node
 
 from puppy_control_msgs.msg import Velocity
+from std_srvs.srv import Empty
 
 
 def parse_packet(text):
@@ -117,6 +118,12 @@ class VrUdpTeleop(Node):
 
         self.timer = self.create_timer(1.0 / max(self.publish_rate, 1.0), self.control_tick)
 
+        # 시작 시 서기 자세 (go_home) — 엎드린 채 시작하지 않도록
+        if self.declare_parameter('stand_on_start', True).value:
+            self.go_home_client = self.create_client(Empty, '/puppy_control/go_home')
+            self.stand_tries = 0
+            self.stand_timer = self.create_timer(1.0, self.try_stand)
+
         self.get_logger().info(
             f'VR UDP 조이스틱 수신 대기: 0.0.0.0:{self.port} '
             f'(데드존 ±{self.deadzone_deg}°, 최대각 {self.max_angle_deg}°, '
@@ -124,6 +131,17 @@ class VrUdpTeleop(Node):
         self.get_logger().info(
             f'발행 토픽: {self.velocity_topic} '
             f'(최대 x={self.max_speed_x} cm/s, yaw={self.max_yaw_rate_deg} deg/s)')
+
+    def try_stand(self):
+        """go_home 서비스가 준비되면 1회 호출해 다리 펴고(서기) 시작."""
+        self.stand_tries += 1
+        if self.go_home_client.service_is_ready():
+            self.go_home_client.call_async(Empty.Request())
+            self.get_logger().info('시작 자세: go_home(서기) 호출')
+            self.stand_timer.cancel()
+        elif self.stand_tries > 15:
+            self.get_logger().warn('go_home 서비스 없음 — 서기 자세 생략 (puppy_control 확인)')
+            self.stand_timer.cancel()
 
     def check_estop(self, text):
         """긴급정지 프로토콜: 'ESTOP' → 즉시 정지+명령 무시, 'RESUME' → 해제. 명령이면 True."""

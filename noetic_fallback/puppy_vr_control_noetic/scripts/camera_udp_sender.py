@@ -26,7 +26,9 @@ class CameraUdpSender(object):
     def __init__(self):
         rospy.init_node('camera_udp_sender')
 
-        self.image_topic = rospy.get_param('~image_topic', '/usb_cam/image_raw/compressed')
+        # ''(기본값) = 자동 탐지: 발행 중인 CompressedImage 토픽을 스스로 찾는다.
+        # 이미지 버전마다 카메라 토픽 이름이 달라서 자동 탐지를 기본으로 함.
+        self.image_topic = rospy.get_param('~image_topic', '')
         self.client_ip = rospy.get_param('~client_ip', '')
         self.client_port = rospy.get_param('~client_port', 5006)
         self.bind_port = rospy.get_param('~bind_port', 5006)
@@ -51,9 +53,45 @@ class CameraUdpSender(object):
         else:
             threading.Thread(target=self.hello_loop, daemon=True).start()
 
-        rospy.Subscriber(self.image_topic, CompressedImage, self.image_cb, queue_size=1)
+        if self.image_topic:
+            rospy.Subscriber(self.image_topic, CompressedImage, self.image_cb, queue_size=1)
+            rospy.loginfo('영상 전송 대기(ROS1): %s -> UDP %d', self.image_topic, self.bind_port)
+        else:
+            threading.Thread(target=self.autodetect_loop, daemon=True).start()
         rospy.on_shutdown(self.shutdown)
-        rospy.loginfo('영상 전송 대기(ROS1): %s -> UDP %d', self.image_topic, self.bind_port)
+
+    def autodetect_loop(self):
+        """발행 중인 CompressedImage 토픽을 찾아 구독. 없으면 원인/해결책을 로그로 안내."""
+        preferred = '/usb_cam/image_raw/compressed'
+        while self.running and not rospy.is_shutdown():
+            try:
+                topics = rospy.get_published_topics()
+            except Exception:
+                time.sleep(2)
+                continue
+            comp = [t for t, ty in topics if ty == 'sensor_msgs/CompressedImage']
+            raw = [t for t, ty in topics if ty == 'sensor_msgs/Image']
+            pick = None
+            if preferred in comp:
+                pick = preferred
+            elif comp:
+                comp.sort(key=lambda t: ('image' not in t.lower(), len(t)))
+                pick = comp[0]
+            if pick:
+                self.image_topic = pick
+                rospy.Subscriber(pick, CompressedImage, self.image_cb, queue_size=1)
+                rospy.loginfo('카메라 토픽 자동 감지: %s -> UDP %d', pick, self.bind_port)
+                return
+            if raw:
+                rospy.logwarn_throttle(
+                    10, '압축 영상 토픽 없음 (원본만 존재: %s). 다른 터미널에서 실행:\n'
+                    '  rosrun image_transport republish raw in:=%s compressed out:=%s',
+                    raw, raw[0], raw[0])
+            else:
+                rospy.logwarn_throttle(
+                    10, '카메라 토픽이 전혀 없음 — 카메라 노드부터 실행:\n'
+                    '  roslaunch puppy_bringup usb_cam.launch')
+            time.sleep(2)
 
     def hello_loop(self):
         while self.running and not rospy.is_shutdown():

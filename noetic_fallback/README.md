@@ -10,17 +10,57 @@ ROS2 환경이 완성되면 이 폴더는 사용하지 않습니다.
   (`/puppy_control/velocity/autogait`, `puppy_control/Velocity` — ros1 브랜치 원본으로 검증)
 - 카메라 토픽만 다름: ROS1 은 `/usb_cam/image_raw/compressed` (기본값 반영됨)
 
-## 설치 (Noetic 로봇에서)
+## 실제 로봇 접속 (Hiwonder 이미지의 네트워크 모드)
+
+부팅하면 로봇이 자체 핫스팟(AP)을 켠다: SSID `HW-XXXXXXXX`, 비밀번호 기본 `hiwonder`,
+이 모드에서 로봇 IP 는 **192.168.149.1 고정**. 노트북을 그 Wi-Fi 에 붙이고:
 
 ```bash
-# 이 폴더의 패키지를 로봇의 catkin 워크스페이스로 복사
-scp -r noetic_fallback/puppy_vr_control_noetic ubuntu@<로봇IP>:~/ros_ws/src/
-ssh ubuntu@<로봇IP>
-cd ~/ros_ws && catkin_make --pkg puppy_vr_control_noetic   # (워크스페이스 경로는 이미지에 따라 ~/puppypi 등일 수 있음)
-source devel/setup.bash
+ssh pi@192.168.149.1     # 안 되면 ubuntu@ / 비밀번호는 raspberrypi 또는 hiwonder 시도
+```
+(WonderPi 앱으로 공유기 Wi-Fi 에 붙이는 LAN 모드도 가능 — 시연은 휴대폰 핫스팟 권장)
+
+## 설치 전 확인 (순서 중요)
+
+```bash
+printenv ROS_DISTRO                      # noetic 확인
+rostopic list | grep puppy               # /puppy_control/velocity/autogait 존재 확인
+rostopic list | grep -iE 'image|bat'     # 카메라/배터리 토픽 이름 메모
+echo $ROS_PACKAGE_PATH                   # catkin 워크스페이스 경로 메모
+# 로봇 들어올리고 자체 동작 확인:
+rostopic pub -1 /puppy_control/velocity/autogait puppy_control/Velocity "{x: 10.0, y: 0.0, yaw_rate: 0.0}"
+rostopic pub -1 /puppy_control/velocity/autogait puppy_control/Velocity "{x: 0.0, y: 0.0, yaw_rate: 0.0}"
 ```
 
-> 워크스페이스 경로 확인: `echo $ROS_PACKAGE_PATH` 로 기존 src 위치를 찾으면 된다.
+카메라 노드는 이미지가 부팅 시 이미 띄우는 경우가 많다 — `/usb_cam/image_raw` 가
+이미 보이면 카메라 launch 를 또 실행하지 말 것. WonderPi 앱과 동시 조종 금지.
+
+## 설치 (Noetic 로봇에서) — 빌드 불필요
+
+⚠️ **저장소 루트에서 `catkin_make` 를 실행하지 말 것** — 저장소가 catkin
+워크스페이스로 오인되어 `src/CMakeLists.txt` 심링크 등 부산물이 생기고
+(ROS2 빌드 방해), 패키지도 못 찾는다. 실수로 실행했다면 정리:
+```bash
+rm -rf <저장소>/build <저장소>/devel <저장소>/src/CMakeLists.txt <저장소>/.catkin_workspace
+```
+
+rospy 순수 파이썬 패키지라 **catkin 빌드 없이** ROS_PACKAGE_PATH 등록만으로 동작한다:
+
+```bash
+# 로봇에서 (저장소를 clone 한 상태 기준)
+export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:<저장소>/noetic_fallback
+chmod +x <저장소>/noetic_fallback/puppy_vr_control_noetic/scripts/*.py
+roslaunch puppy_vr_control_noetic vr_control.launch
+# 매번 export 가 귀찮으면: 위 export 줄을 ~/.bashrc 에 추가
+
+# 또는 스크립트 직접 실행 (등록조차 불필요):
+cd <저장소>/noetic_fallback/puppy_vr_control_noetic/scripts
+python3 vr_udp_teleop.py     # "수신 대기 0.0.0.0:5005" 뜨면 성공
+```
+
+(정석대로 catkin 에 넣고 싶다면: `echo $ROS_PACKAGE_PATH` 로 로봇의 **기존**
+워크스페이스를 찾아 그 안의 `src/` 로 이 패키지를 복사한 뒤 거기서
+`catkin_make --only-pkg-with-deps puppy_vr_control_noetic`)
 
 ## 실행
 

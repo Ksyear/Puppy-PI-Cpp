@@ -18,6 +18,7 @@ import time
 import rospy
 
 from puppy_control.msg import Velocity
+from std_srvs.srv import Empty
 
 
 def parse_packet(text):
@@ -81,11 +82,24 @@ class VrUdpTeleop(object):
         self.running = True
         threading.Thread(target=self.rx_loop, daemon=True).start()
 
+        # 시작 시 서기 자세 (go_home) — 엎드린 채 시작하지 않도록
+        if rospy.get_param('~stand_on_start', True):
+            threading.Thread(target=self.stand_up, daemon=True).start()
+
         rospy.on_shutdown(self.shutdown)
         rospy.Timer(rospy.Duration(1.0 / max(self.publish_rate, 1.0)), self.control_tick)
 
         rospy.loginfo('VR UDP 수신 대기(ROS1): 0.0.0.0:%d -> %s',
                       self.port, self.velocity_topic)
+
+    def stand_up(self):
+        """다리 펴고(서기) 시작: /puppy_control/go_home 1회 호출."""
+        try:
+            rospy.wait_for_service('/puppy_control/go_home', timeout=15)
+            rospy.ServiceProxy('/puppy_control/go_home', Empty)()
+            rospy.loginfo('시작 자세: go_home(서기) 호출 완료')
+        except Exception as e:
+            rospy.logwarn('go_home 호출 실패 — 수동 실행: rosservice call /puppy_control/go_home (%s)', e)
 
     def check_estop(self, text):
         if 'ESTOP' in text:

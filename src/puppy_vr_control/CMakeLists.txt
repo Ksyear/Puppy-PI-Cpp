@@ -11,6 +11,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(puppy_control_msgs REQUIRED)
 
@@ -18,7 +19,7 @@ include_directories(include)
 
 # VR(Quest) UDP 조이스틱 수신 → /puppy_control/velocity/autogait 발행
 add_executable(vr_udp_teleop src/vr_udp_teleop.cpp)
-ament_target_dependencies(vr_udp_teleop rclcpp puppy_control_msgs)
+ament_target_dependencies(vr_udp_teleop rclcpp std_srvs puppy_control_msgs)
 
 # /image_raw/compressed(JPEG) → UDP 청크 전송 (Quest에서 영상 수신용)
 add_executable(camera_udp_sender src/camera_udp_sender.cpp)
