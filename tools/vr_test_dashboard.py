@@ -147,8 +147,10 @@ def selftest():
 class Dashboard:
     SEND_HZ = 20.0  # Unity UDP_Joystick_Sender 와 동일
 
-    def __init__(self, robot_ip):
+    def __init__(self, robot_ip, max_tilt=30.0, ramp=0.35):
         self.robot = robot_ip
+        self.max_tilt = max_tilt   # 풀 조작 시 보낼 기울기(°) — 45=로봇 최대속도
+        self.ramp = ramp           # 0→풀 기울기 도달 시간(초) — 급출발/급정지 방지
         self.ctrl_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.video_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.video_sock.settimeout(0.2)
@@ -237,7 +239,8 @@ class Dashboard:
 
         joy_center = (830, 190)
         joy_radius = 95
-        knob = [0.0, 0.0]      # nx(오른쪽+), ny(위쪽+) — -1..1
+        knob = [0.0, 0.0]      # 목표 입력 (오른쪽+, 위쪽+) — -1..1
+        sx, sy = 0.0, 0.0      # 램프가 적용된 실제 송신값
         dragging = False
         send_acc = 0.0
 
@@ -251,6 +254,8 @@ class Dashboard:
                         self.running = False
                     elif ev.key == pygame.K_SPACE:
                         self.estop = True
+                        knob = [0.0, 0.0]
+                        sx, sy = 0.0, 0.0
                         for _ in range(3):
                             self.send_ctrl('ESTOP')
                     elif ev.key == pygame.K_r:
@@ -278,11 +283,19 @@ class Dashboard:
             keys = pygame.key.get_pressed()
             kx = (keys[pygame.K_d] or keys[pygame.K_RIGHT]) - (keys[pygame.K_a] or keys[pygame.K_LEFT])
             ky = (keys[pygame.K_w] or keys[pygame.K_UP]) - (keys[pygame.K_s] or keys[pygame.K_DOWN])
-            nx, ny = (float(kx), float(ky)) if (kx or ky) else (knob[0], knob[1])
+            tx, ty = (float(kx), float(ky)) if (kx or ky) else (knob[0], knob[1])
 
-            # 기울기 각도로 변환 (Unity 와 동일 의미: 45° = 최대)
-            x_angle = MAX_ANGLE_DEG * nx
-            z_angle = MAX_ANGLE_DEG * ny
+            # 부드러운 가감속(램프): 목표 기울기까지 ramp 초에 걸쳐 서서히 도달
+            # — 키를 누르는 순간 최대속도가 확 나가서 로봇이 홱 움직이는 것 방지
+            step = dt / max(self.ramp, 0.01)
+            sx += max(-step, min(step, tx - sx))
+            sy += max(-step, min(step, ty - sy))
+
+            # 낮은 기울기에서 미세 조종이 쉽도록 완만한 곡선(expo)
+            def expo(v):
+                return v * (0.5 + 0.5 * abs(v))
+            x_angle = self.max_tilt * expo(sx)
+            z_angle = self.max_tilt * expo(sy)
 
             # 20Hz 송신 (Unity sendRate 와 동일). P 로 끊김 시뮬레이션 가능
             send_acc += dt
@@ -316,8 +329,8 @@ class Dashboard:
             # 가상 조이스틱
             pygame.draw.circle(screen, (46, 50, 58), joy_center, joy_radius)
             pygame.draw.circle(screen, (90, 96, 110), joy_center, joy_radius, 2)
-            kx_px = int(joy_center[0] + nx * (joy_radius - 18))
-            ky_px = int(joy_center[1] - ny * (joy_radius - 18))
+            kx_px = int(joy_center[0] + sx * (joy_radius - 18))
+            ky_px = int(joy_center[1] - sy * (joy_radius - 18))
             pygame.draw.circle(screen, (200, 60, 60) if self.estop else (80, 160, 255), (kx_px, ky_px), 16)
             screen.blit(font.render('drag / WASD', True, (150, 150, 150)), (joy_center[0] - 50, joy_center[1] + joy_radius + 8))
 
@@ -368,6 +381,10 @@ class Dashboard:
 def main():
     ap = argparse.ArgumentParser(description='PuppyPi VR 테스트 대시보드 (Quest 없이 전체 파이프라인 시험)')
     ap.add_argument('--robot', default='192.168.0.100', help='로봇 IP')
+    ap.add_argument('--max-tilt', type=float, default=30.0,
+                    help='풀 조작 시 기울기(°). 45=로봇 최대속도, 기본 30=약 2/3 속도 (부드러움)')
+    ap.add_argument('--ramp', type=float, default=0.35,
+                    help='0→풀 기울기 도달 시간(초). 클수록 부드럽고 작을수록 민첩 (기본 0.35)')
     ap.add_argument('--selftest', action='store_true', help='네트워크/GUI 없이 내부 로직 검증')
     args = ap.parse_args()
 
@@ -383,7 +400,7 @@ def main():
 
     print('대시보드 시작 — 로봇: %s (조종:%d 영상:%d 상태:%d)' % (
         args.robot, CTRL_PORT, VIDEO_PORT, STATUS_PORT))
-    Dashboard(args.robot).run()
+    Dashboard(args.robot, max_tilt=args.max_tilt, ramp=args.ramp).run()
 
 
 if __name__ == '__main__':

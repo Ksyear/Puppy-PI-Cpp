@@ -18,7 +18,7 @@ import time
 
 import rospy
 
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import CompressedImage, Image
 
 
 class CameraUdpSender(object):
@@ -35,6 +35,8 @@ class CameraUdpSender(object):
         self.max_fps = rospy.get_param('~max_fps', 15.0)
         self.chunk_size = rospy.get_param('~chunk_size', 1400)
         self.client_timeout_sec = rospy.get_param('~client_timeout_sec', 5.0)
+        self.jpeg_quality = rospy.get_param('~jpeg_quality', 80)  # 원본 직접 인코딩 시 화질
+        self.bridge = None
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -83,10 +85,14 @@ class CameraUdpSender(object):
                 rospy.loginfo('카메라 토픽 자동 감지: %s -> UDP %d', pick, self.bind_port)
                 return
             if raw:
-                rospy.logwarn_throttle(
-                    10, '압축 영상 토픽 없음 (원본만 존재: %s). 다른 터미널에서 실행:\n'
-                    '  rosrun image_transport republish raw in:=%s compressed out:=%s',
-                    raw, raw[0], raw[0])
+                # 압축본이 없으면 원본을 구독해 노드가 직접 JPEG 인코딩 (추가 터미널 불필요)
+                raw.sort(key=lambda t: (not t.startswith('/usb_cam'), 'image' not in t.lower(), len(t)))
+                pick = raw[0]
+                self.image_topic = pick
+                rospy.Subscriber(pick, Image, self.raw_cb, queue_size=1, buff_size=2 ** 22)
+                rospy.loginfo('압축 토픽 없음 → 원본 직접 JPEG 인코딩 전송: %s (quality=%d)',
+                              pick, self.jpeg_quality)
+                return
             else:
                 rospy.logwarn_throttle(
                     10, '카메라 토픽이 전혀 없음 — 카메라 노드부터 실행:\n'
@@ -107,19 +113,42 @@ class CameraUdpSender(object):
                 self.client_addr = addr
                 self.last_hello = time.monotonic()
 
-    def image_cb(self, msg):
+    def _dest_if_ready(self):
+        """fps 제한/클라이언트 유효성 통과 시 목적지 반환, 아니면 None."""
         now = time.monotonic()
         if self.max_fps > 0 and now - self.last_send < 1.0 / self.max_fps:
-            return
+            return None
         with self.lock:
             dest = self.client_addr
             if not self.client_ip and dest is not None:
                 if now - self.last_hello > self.client_timeout_sec:
-                    return
+                    return None
+        return dest
+
+    def raw_cb(self, msg):
+        """원본(sensor_msgs/Image) → JPEG 직접 인코딩 후 전송."""
+        dest = self._dest_if_ready()
         if dest is None:
             return
+        try:
+            import cv2                      # 지연 임포트 (원본 경로일 때만 필요)
+            from cv_bridge import CvBridge
+            if self.bridge is None:
+                self.bridge = CvBridge()
+            img = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+            ok, buf = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), int(self.jpeg_quality)])
+            if ok:
+                self._send_jpeg(buf.tobytes(), dest)
+        except Exception as e:
+            rospy.logwarn_throttle(10, 'JPEG 인코딩 실패: %s', e)
 
-        jpeg = bytes(msg.data)
+    def image_cb(self, msg):
+        dest = self._dest_if_ready()
+        if dest is None:
+            return
+        self._send_jpeg(bytes(msg.data), dest)
+
+    def _send_jpeg(self, jpeg, dest):
         total = len(jpeg)
         if total == 0:
             return
@@ -135,7 +164,7 @@ class CameraUdpSender(object):
                 self.sock.sendto(header + payload, dest)
             except OSError:
                 return
-        self.last_send = now
+        self.last_send = time.monotonic()
 
     def shutdown(self):
         self.running = False

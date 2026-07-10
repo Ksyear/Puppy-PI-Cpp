@@ -44,7 +44,13 @@ rostopic pub -1 /puppy_control/velocity/autogait puppy_control/Velocity "{x: 0.0
 rm -rf <저장소>/build <저장소>/devel <저장소>/src/CMakeLists.txt <저장소>/.catkin_workspace
 ```
 
-rospy 순수 파이썬 패키지라 **catkin 빌드 없이** ROS_PACKAGE_PATH 등록만으로 동작한다:
+**가장 간단한 실행 — 한 방 스크립트** (export+chmod+roslaunch+이전 노드 정리 포함):
+```bash
+~/Puppy-PI-C-/noetic_fallback/run_vr.sh                # 기본
+~/Puppy-PI-C-/noetic_fallback/run_vr.sh max_speed_x:=8 # 더 천천히
+```
+
+수동으로 하고 싶다면 — rospy 순수 파이썬 패키지라 **catkin 빌드 없이** ROS_PACKAGE_PATH 등록만으로 동작한다:
 
 ```bash
 # 로봇에서 (저장소를 clone 한 상태 기준)
