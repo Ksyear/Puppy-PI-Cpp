@@ -5,9 +5,9 @@
   <arg name="use_camera" default="true"/>
   <arg name="debug" default="false"/>
   <arg name="stand_on_start" default="true"/>   <!-- 시작 시 다리 펴고 서기 -->
-  <arg name="max_speed_x" default="12.0"/>      <!-- 최대 전진 속도 cm/s (부드럽게: 8~12 권장) -->
+  <arg name="max_speed_x" default="16.0"/>      <!-- 실기기 확정값: 16 (빠른 걸음새 구간이 더 부드러움) -->
   <arg name="max_yaw_rate_deg" default="16.0"/> <!-- 최대 회전 속도 deg/s -->
-  <arg name="turn_forward_bias" default="0.0"/> <!-- 제자리 회전 시 뒤로 밀리면 1.0~2.5 -->
+  <arg name="turn_forward_bias" default="1.5"/> <!-- 실기기 확정값: 제자리 회전 후진 드리프트 상쇄 -->
   <arg name="speed_step" default="1.0"/>        <!-- 속도 양자화 폭. 흔들리면 2~3 시도 -->
   <arg name="image_topic" default=""/>          <!-- '' = 압축 영상 토픽 자동 탐지 -->
 

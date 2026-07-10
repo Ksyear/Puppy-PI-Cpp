@@ -385,8 +385,8 @@ class Dashboard:
 def main():
     ap = argparse.ArgumentParser(description='PuppyPi VR 테스트 대시보드 (Quest 없이 전체 파이프라인 시험)')
     ap.add_argument('--robot', default='192.168.0.100', help='로봇 IP')
-    ap.add_argument('--max-tilt', type=float, default=30.0,
-                    help='풀 조작 시 기울기(°). 45=로봇 최대속도, 기본 30=약 2/3 속도 (부드러움)')
+    ap.add_argument('--max-tilt', type=float, default=45.0,
+                    help='풀 조작 시 기울기(°). 실기기 확정 기본값 45 (Unity 조이스틱과 동일 범위)')
     ap.add_argument('--ramp', type=float, default=0.35,
                     help='0→풀 기울기 도달 시간(초). 클수록 부드럽고 작을수록 민첩 (기본 0.35)')
     ap.add_argument('--selftest', action='store_true', help='네트워크/GUI 없이 내부 로직 검증')
