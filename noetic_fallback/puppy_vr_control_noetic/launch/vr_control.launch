@@ -10,6 +10,7 @@
   <arg name="turn_forward_bias" default="1.5"/> <!-- 실기기 확정값: 제자리 회전 후진 드리프트 상쇄 -->
   <arg name="speed_step" default="1.0"/>        <!-- 속도 양자화 폭. 흔들리면 2~3 시도 -->
   <arg name="image_topic" default=""/>          <!-- '' = 압축 영상 토픽 자동 탐지 -->
+  <arg name="use_mapping" default="false"/>     <!-- LiDAR 지도작성 + UDP 5008 전송 -->
 
   <node name="vr_udp_teleop" pkg="puppy_vr_control_noetic" type="vr_udp_teleop.py" output="screen">
     <param name="debug" value="$(arg debug)"/>
@@ -27,4 +28,7 @@
 
   <node name="robot_status_sender" pkg="puppy_vr_control_noetic"
         type="robot_status_sender.py" output="screen"/>
+
+  <node if="$(arg use_mapping)" name="lidar_mapping" pkg="puppy_vr_control_noetic"
+        type="lidar_mapping.py" output="screen"/>
 </launch>

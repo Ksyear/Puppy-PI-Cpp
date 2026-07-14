@@ -42,6 +42,7 @@ import time
 CTRL_PORT = 5005
 VIDEO_PORT = 5006
 STATUS_PORT = 5007
+MAP_PORT = 5008
 
 # 로봇 쪽 vr_udp_teleop 기본 파라미터와 동일 (예상 명령 미리보기 계산용)
 DEADZONE_DEG = 5.0
@@ -156,9 +157,13 @@ class Dashboard:
         self.video_sock.settimeout(0.2)
         self.status_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.status_sock.settimeout(0.2)
+        self.map_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.map_sock.settimeout(0.2)
 
         self.lock = threading.Lock()
         self.latest_jpeg = None
+        self.latest_map = None
+        self.view_map = False
         self.video_frames = 0
         self.video_fps = 0.0
         self.status = {}
@@ -169,6 +174,7 @@ class Dashboard:
 
         threading.Thread(target=self.video_loop, daemon=True).start()
         threading.Thread(target=self.status_loop, daemon=True).start()
+        threading.Thread(target=self.map_loop, daemon=True).start()
         threading.Thread(target=self.fps_loop, daemon=True).start()
 
     # hello 를 1초마다 보내 로봇의 자동 발견 대상이 되고, 응답 스트림을 수신
@@ -194,6 +200,29 @@ class Dashboard:
                 with self.lock:
                     self.latest_jpeg = jpeg
                     self.video_frames += 1
+
+    def map_loop(self):
+        """지도 이미지 수신 (영상과 같은 청크 프로토콜, 포트 5008, hello 자동 발견)."""
+        last_hello = 0.0
+        fa = FrameAssembler()
+        while self.running:
+            now = time.monotonic()
+            if now - last_hello > 1.0:
+                try:
+                    self.map_sock.sendto(b'hello', (self.robot, MAP_PORT))
+                except OSError:
+                    pass
+                last_hello = now
+            try:
+                pkt, _ = self.map_sock.recvfrom(2048)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            jpeg = fa.feed(pkt)
+            if jpeg:
+                with self.lock:
+                    self.latest_map = jpeg
 
     def status_loop(self):
         last_hello = 0.0
@@ -263,6 +292,8 @@ class Dashboard:
                         self.send_ctrl('RESUME')
                     elif ev.key == pygame.K_p:
                         self.tx_paused = not self.tx_paused
+                    elif ev.key == pygame.K_m:
+                        self.view_map = not self.view_map
                 elif ev.type == pygame.MOUSEBUTTONDOWN:
                     dx = ev.pos[0] - joy_center[0]
                     dy = ev.pos[1] - joy_center[1]
@@ -309,7 +340,7 @@ class Dashboard:
 
             # 영상 (좌측 640x480)
             with self.lock:
-                jpeg = self.latest_jpeg
+                jpeg = self.latest_map if self.view_map else self.latest_jpeg
                 fps = self.video_fps
                 status = dict(self.status)
                 status_age = time.monotonic() - self.last_status_time if self.last_status_time else 1e9
@@ -323,8 +354,13 @@ class Dashboard:
                     pass
             else:
                 pygame.draw.rect(screen, (40, 42, 48), video_rect)
-                screen.blit(font.render('NO VIDEO (waiting :5006...)', True, (140, 140, 140)), (220, 240))
+                wait_msg = 'NO MAP (waiting :5008... use_mapping:=true?)' if self.view_map \
+                    else 'NO VIDEO (waiting :5006...)'
+                screen.blit(font.render(wait_msg, True, (140, 140, 140)), (170, 240))
             pygame.draw.rect(screen, (70, 74, 84), video_rect, 2)
+            screen.blit(font.render(
+                'MAP  [M: camera]' if self.view_map else 'CAMERA  [M: map]',
+                True, (240, 210, 90) if self.view_map else (150, 150, 150)), (18, 16))
 
             # 가상 조이스틱
             pygame.draw.circle(screen, (46, 50, 58), joy_center, joy_radius)
@@ -355,7 +391,7 @@ class Dashboard:
                  (240, 180, 60) if self.tx_paused else (210, 210, 210))
             line(5, 'SEND ANGLE : X=%+6.1f  Z=%+6.1f' % (x_angle, z_angle))
             line(6, 'EXPECT CMD : vx=%+5.1f cm/s  yaw=%+5.2f rad/s' % (vx, vyaw), (120, 190, 255))
-            line(8, '[SPACE] ESTOP   [R] resume   [P] pause-TX   [ESC] quit', (150, 150, 150))
+            line(8, '[SPACE] ESTOP  [R] resume  [P] pause-TX  [M] map  [ESC] quit', (150, 150, 150))
 
             if self.estop:
                 screen.blit(big.render('E-STOP ACTIVE  (press R)', True, (255, 70, 70)), (660, 20))

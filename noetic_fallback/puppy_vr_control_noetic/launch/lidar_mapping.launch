@@ -1,0 +1,14 @@
+<launch>
+  <!-- LiDAR 지도작성 단독 실행 (ROS1)
+       /scan 자동 탐지 → /map 발행(latch) + UDP 5008 로 지도 이미지 전송(대시보드/VR)
+       지도 저장: rosservice call /lidar_mapping/save_map  (~/maps/ros1_map.pgm+.yaml) -->
+  <arg name="map_size_m" default="12.0"/>
+  <arg name="resolution" default="0.05"/>
+  <arg name="laser_yaw" default="0.0"/>   <!-- LiDAR 가 거꾸로 장착이면 3.14159 -->
+
+  <node name="lidar_mapping" pkg="puppy_vr_control_noetic" type="lidar_mapping.py" output="screen">
+    <param name="map_size_m" value="$(arg map_size_m)"/>
+    <param name="resolution" value="$(arg resolution)"/>
+    <param name="laser_yaw" value="$(arg laser_yaw)"/>
+  </node>
+</launch>

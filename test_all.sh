@@ -15,6 +15,8 @@ set -euo pipefail
 WS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$WS"
 
+bash "$WS/tools/check_public_tree.sh"
+
 # shellcheck disable=SC1091
 source /opt/ros/humble/setup.bash
 # shellcheck disable=SC1091

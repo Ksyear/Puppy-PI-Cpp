@@ -6,11 +6,12 @@
 
 | 구성요소 | 상태 |
 |---|---|
-| ROS 래퍼 (토픽/서비스/파라미터/명령 검증/autogait 타이밍 계산/IMU 상보필터/100Hz 발행) | ✅ **완전 이식** (`src/puppy_control_node.cpp`) |
-| 보행·IK 엔진 (HiwonderPuppy) | ⛔ **미이식** — `src/stub_engine.cpp` 는 스텁(서보 출력 없음) |
+| ROS 래퍼 (토픽/서비스/파라미터/명령 검증/autogait 타이밍 계산/IMU 상보필터/100Hz 발행) | **완전 이식** (`src/puppy_control_node.cpp`) |
+| 보행·IK 엔진 (HiwonderPuppy) | **미이식** — `src/stub_engine.cpp` 는 스텁(서보 출력 없음) |
 
-**이 패키지만으로는 로봇이 움직이지 않는다.** 원본이 사용하는 보행 엔진과 서보
-출력 코드는 git 저장소가 아니라 **로봇 내부에만** 있기 때문이다:
+**공개된 이 패키지만으로는 로봇이 움직이지 않는다.** 원본이 사용하는 보행 엔진과
+서보 출력 코드는 공식 GitHub가 아니라 사용자가 보유한 Hiwonder system image
+내부에 있기 때문이다:
 
 ```
 /home/ubuntu/software/puppypi_control/
@@ -20,15 +21,23 @@
 └── action_group_control.py  # .d6a 동작 그룹 재생
 ```
 
-### 엔진 완성 절차
-1. 로봇에서 위 폴더를 복사해 온다:
-   `scp -r ubuntu@<로봇IP>:/home/ubuntu/software/puppypi_control ./`
-2. 위 파이썬 수학을 C++로 이식해 `PuppyEngine` 구현
-   (`include/puppy_control_cpp/puppy_engine.hpp` 인터페이스의 메서드별 대응 관계가
-   헤더 주석에 정리돼 있음)
-3. `CMakeLists.txt` 에서 `stub_engine.cpp` 를 새 구현 파일로 교체
+### 로컬 엔진 사용 절차
 
-그 전까지는 **파이썬 `puppy_control` 을 그대로 쓰면 된다** — 이 패키지는
+1. 원본 Python 엔진은 로봇의 `/home/ubuntu/software/puppypi_control`에 그대로 두고
+   workspace 안으로 복사하지 않는다.
+2. 백업은 저장소 밖(예: `~/puppypi_private/robot_software_backup`)에 보관한다.
+3. 비공개 C++ 구현은 이 패키지의 `private/src/*.cpp`와
+   `private/include/`에 둔다. `PuppyEngine` factory는
+   `std::unique_ptr<PuppyEngine> make_puppy_engine()`을 하나만 제공해야 한다.
+4. CMake는 `private/src/*.cpp`가 있으면 이를 사용하고, 없으면 공개용
+   `stub_engine.cpp`를 사용한다.
+
+`private/`, 원본 Python 엔진, `ActionGroups`, `*.d6a`와 image 백업은 모두
+`.gitignore` 대상이다. 라이선스가 확인되지 않은 Hiwonder 구성요소나 그 포팅본을
+공개 저장소에 commit하지 않는다.
+
+로컬 C++ 엔진이 완성되기 전에는 순정 이미지의 **파이썬 `puppy_control`을 그대로
+사용하면 된다** — 이 패키지는
 토픽/서비스 이름이 완전히 동일한 드롭인 교체이므로, 나머지 시스템(VR 노드 등)은
 어느 쪽이 돌고 있는지 구분하지 못한다. 단, **둘을 동시에 실행하지 말 것**
 (같은 토픽을 두 노드가 처리하게 됨).

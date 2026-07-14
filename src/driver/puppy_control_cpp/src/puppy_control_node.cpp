@@ -5,7 +5,8 @@
 // 토픽/서비스/파라미터/검증 규칙/IMU 상보필터/100Hz 발행 루프를 파이썬 원본과
 // 동일하게 유지한다 (드롭인 교체 목적). 보행 엔진 호출은 PuppyEngine 인터페이스
 // 뒤로 분리 — 현재는 StubPuppyEngine(서보 출력 없음)이며, 로봇의
-// /home/ubuntu/software/puppypi_control 파일 확보 후 실제 엔진으로 교체한다.
+// 실제 엔진은 사용자가 보유한 system image를 기반으로 로컬 private/에만 두며
+// 공개 저장소에는 포함하지 않는다.
 //
 // 파이썬 원본과 의도적으로 다른 점:
 //  - 로봇팔(ArmIK) 초기화 생략: 원본은 with_arm=0 이어도 ArmIK 를 만들고

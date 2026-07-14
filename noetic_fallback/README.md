@@ -37,7 +37,7 @@ rostopic pub -1 /puppy_control/velocity/autogait puppy_control/Velocity "{x: 0.0
 
 ## 설치 (Noetic 로봇에서) — 빌드 불필요
 
-⚠️ **저장소 루트에서 `catkin_make` 를 실행하지 말 것** — 저장소가 catkin
+(주의) **저장소 루트에서 `catkin_make` 를 실행하지 말 것** — 저장소가 catkin
 워크스페이스로 오인되어 `src/CMakeLists.txt` 심링크 등 부산물이 생기고
 (ROS2 빌드 방해), 패키지도 못 찾는다. 실수로 실행했다면 정리:
 ```bash
@@ -114,3 +114,4 @@ FND(숫자 표시) 전용 MCU 에만 연결. `sensor_control.py` 의 getBattery(
 
 상위에 `COLCON_IGNORE` 가 있어 ROS2 빌드(`./build_all.sh`)가 이 폴더를 건너뛴다.
 ROS1(catkin)과 ROS2(colcon) 패키지가 섞이면 빌드가 깨지기 때문이다.
+| `lidar_mapping` | LiDAR로 지도 작성 → `/map` + UDP 5008 이미지 전송 (대시보드 M 키로 보기, `use_mapping:=true` 로 활성) |

@@ -3,12 +3,13 @@
 // PuppyEngine 의 임시(스텁) 구현.
 //
 // ★ 아직 실제 보행 엔진이 아니다 — 하드웨어(서보) 출력이 전혀 없다. ★
-// 실제 구현에는 로봇 내부의 다음 파이썬 파일들이 필요하다:
+// 실제 구현은 사용자가 보유한 Hiwonder system image를 로컬에서 참고한다.
+// 아래 파일과 포팅 구현은 저장소에 포함하거나 재배포하지 않는다:
 //   /home/ubuntu/software/puppypi_control/puppy_kinematics.py  (HiwonderPuppy: 보행/IK 수학)
 //   /home/ubuntu/software/puppypi_control/pwm_servo_control.py (서보 펄스 출력)
 //   /home/ubuntu/software/puppypi_control/servo_controller.py
 //   /home/ubuntu/software/puppypi_control/action_group_control.py (.d6a 동작 재생)
-// 이 파일들을 확보하면 stub 을 HiwonderPuppyEngine 구현으로 교체한다.
+// 비공개 구현은 .gitignore 대상인 private/src/에 둔다.
 //
 // 스텁의 역할:
 //  - puppy_control_node(ROS 래퍼)가 빌드·실행되어 토픽/서비스 인터페이스를
@@ -33,8 +34,8 @@ public:
     RCLCPP_WARN(
       rclcpp::get_logger("puppy_engine"),
       "★ 보행 엔진 미이식 상태(StubPuppyEngine) — 서보 출력 없음. "
-      "로봇의 /home/ubuntu/software/puppypi_control 폴더를 확보해 "
-      "실제 엔진을 구현해야 로봇이 움직입니다.");
+      "사용자가 보유한 순정 이미지 기반의 로컬 private 엔진이 있어야 "
+      "로봇이 움직입니다.");
   }
 
   void stance_config(const Mat34 & stance, double pitch, double roll) override

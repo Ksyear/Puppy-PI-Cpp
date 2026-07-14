@@ -19,12 +19,24 @@ find_package(ros_robot_controller_msgs REQUIRED)
 
 include_directories(include)
 
-# puppy_control 노드 = ROS 래퍼(puppy_control_node.cpp) + 보행 엔진(stub_engine.cpp)
-# 엔진 구현이 완성되면 stub_engine.cpp 를 실제 구현 파일로 교체하면 된다
+# 공개 저장소에는 stub 만 둔다. 사용자가 보유한 Hiwonder 이미지로부터 작성한
+# 비공개 C++ 엔진은 private/src/*.cpp 에 두며, 이 디렉터리는 .gitignore 대상이다.
+file(GLOB PRIVATE_ENGINE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/private/src/*.cpp")
+if(PRIVATE_ENGINE_SOURCES)
+  set(PUPPY_ENGINE_SOURCES ${PRIVATE_ENGINE_SOURCES})
+  message(STATUS "puppy_control_cpp: using local private PuppyEngine")
+else()
+  set(PUPPY_ENGINE_SOURCES src/stub_engine.cpp)
+  message(STATUS "puppy_control_cpp: private engine not found; using non-driving stub")
+endif()
+
 add_executable(puppy_control
   src/puppy_control_node.cpp
-  src/stub_engine.cpp
+  ${PUPPY_ENGINE_SOURCES}
 )
+if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/private/include")
+  target_include_directories(puppy_control PRIVATE private/include)
+endif()
 ament_target_dependencies(puppy_control
   rclcpp std_msgs std_srvs geometry_msgs sensor_msgs
   puppy_control_msgs ros_robot_controller_msgs

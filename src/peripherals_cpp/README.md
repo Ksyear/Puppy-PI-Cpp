@@ -28,7 +28,7 @@ ros2 run peripherals_cpp teleop_key_control              # 키보드 조종 (터
 
 1. **pygame → 리눅스 조이스틱 API**(`/dev/input/js0`, `js_event`) 직접 읽기.
    조이스틱 연결 감시(0.2초 주기 재연결)는 원본과 동일.
-2. **★ 축/버튼 번호 매핑은 장치 의존** — pygame 과 js API 가 대부분 같은 커널
+2. **(중요) 축/버튼 번호 매핑은 장치 의존** — pygame 과 js API 가 대부분 같은 커널
    순서를 쓰지만, Hiwonder 게임패드에서 확인 필요:
    - 십자키(hat)가 축 4,5 가 아니면 `hat_x_axis`/`hat_y_axis` 파라미터 조정
    - 십자키 위/아래가 반대면 `invert_hat_y` 반전

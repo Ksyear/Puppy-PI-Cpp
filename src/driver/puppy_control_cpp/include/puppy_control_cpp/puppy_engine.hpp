@@ -4,14 +4,15 @@
 //
 // 파이썬 puppy_control(puppy.py)은 로봇 내부 /home/ubuntu/software/puppypi_control
 // 의 외부 모듈들(HiwonderPuppy, servo_controller, pwm_servo_control,
-// action_group_control)을 불러 쓴다. 이 모듈들은 git 저장소에 없으므로,
-// C++ 이식에서는 그 경계를 이 추상 인터페이스로 분리했다.
+// action_group_control)을 불러 쓴다. 이 모듈들은 공식 git 저장소에 없으며
+// 재배포하지 않는다. C++ 이식에서는 그 경계를 이 추상 인터페이스로 분리하고,
+// 실제 구현은 .gitignore 대상인 private/에만 둔다.
 //
 //   PUPPY 노드 (puppy_control_node.cpp, 완전 이식됨)
 //        │  이 인터페이스 호출
 //        ▼
 //   PuppyEngine ─── StubPuppyEngine  : 현재 (하드웨어 출력 없음, 로그만)
-//               └── HiwonderPuppyEngine : puppypi_control 파일 확보 후 이식할 실제 구현
+//               └── PrivatePuppyEngine : 사용자 로컬 전용 실제 구현(공개하지 않음)
 //
 // 파이썬 원본 대응:
 //   stance_config / gait_config / start / end / move / move_stop /
