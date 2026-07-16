@@ -12,14 +12,6 @@
   <arg name="image_topic" default=""/>          <!-- '' = 압축 영상 토픽 자동 탐지 -->
   <arg name="use_mapping" default="false"/>     <!-- LiDAR 지도작성 + UDP 5008 전송 -->
 
-  <!-- 레트로(옛날 TV) 영상 효과: 잔상+주사선+비네트+색수차+x2 업스케일 -->
-  <arg name="retro" default="true"/>            <!-- false = 원본 그대로 전송 -->
-  <arg name="retro_upscale" default="2.0"/>     <!-- 1.0 = 업스케일 끔 (Wi-Fi 대역폭 절약) -->
-  <arg name="retro_ghost" default="0.65"/>      <!-- 잔상 유지율/프레임 (0~0.95, 클수록 긴 꼬리) -->
-  <arg name="retro_scanline" default="0.35"/>   <!-- 주사선 어둡기 (0~0.9) -->
-  <arg name="retro_vignette" default="0.35"/>   <!-- 모서리 어둡기 (0~0.9) -->
-  <arg name="retro_chroma" default="2"/>        <!-- 색수차 px (0=끔) -->
-
   <node name="vr_udp_teleop" pkg="puppy_vr_control_noetic" type="vr_udp_teleop.py" output="screen">
     <param name="debug" value="$(arg debug)"/>
     <param name="stand_on_start" value="$(arg stand_on_start)"/>
@@ -32,12 +24,6 @@
   <node if="$(arg use_camera)" name="camera_udp_sender" pkg="puppy_vr_control_noetic"
         type="camera_udp_sender.py" output="screen">
     <param name="image_topic" value="$(arg image_topic)"/>
-    <param name="retro" value="$(arg retro)"/>
-    <param name="retro_upscale" value="$(arg retro_upscale)"/>
-    <param name="retro_ghost" value="$(arg retro_ghost)"/>
-    <param name="retro_scanline" value="$(arg retro_scanline)"/>
-    <param name="retro_vignette" value="$(arg retro_vignette)"/>
-    <param name="retro_chroma" value="$(arg retro_chroma)"/>
   </node>
 
   <node name="robot_status_sender" pkg="puppy_vr_control_noetic"
