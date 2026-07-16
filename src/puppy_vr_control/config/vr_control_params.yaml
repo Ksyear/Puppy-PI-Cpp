@@ -49,3 +49,14 @@ camera_udp_sender:
     max_fps: 15.0              # Wi-Fi 대역폭 보호용 프레임 제한
     chunk_size: 1400           # MTU(1500) 이하로 유지할 것
     client_timeout_sec: 5.0    # hello 가 이 시간 동안 없으면 전송 중단
+
+map_udp_sender:
+  ros__parameters:
+    map_topic: /map            # lidar_mapping_node 가 발행하는 OccupancyGrid
+    client_ip: ""              # 비우면 hello 자동 발견 (대시보드가 5008 로 hello 전송)
+    client_port: 5008          # client_ip 지정 시 목적지 포트
+    bind_port: 5008            # hello 수신 포트 (대시보드 MAP_PORT 와 동일)
+    max_hz: 5.0                # 전송 상한 (지도는 보통 1Hz 라 사실상 통과)
+    chunk_size: 1400           # MTU(1500) 이하로 유지할 것
+    client_timeout_sec: 5.0    # hello 가 이 시간 동안 없으면 전송 중단
+    unknown_gray: 128          # 미탐사 셀 밝기 (0=검정 ~ 255=흰색)

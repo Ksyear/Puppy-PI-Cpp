@@ -1,90 +1,119 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────────────────────
-# 완전 처음(맨 Ubuntu 22.04)에서 필요한 것을 전부 설치하는 스크립트
-#
-#   ./setup_from_scratch.sh robot   # 로봇(라즈베리파이) — ros-base + 드라이버류
-#   ./setup_from_scratch.sh pc      # 모니터링/개발 PC — desktop(rviz2 포함)
-#
-# 주의: Hiwonder 순정 이미지에는 ROS2 Humble 이 이미 설치되어 있으므로
-#       이 스크립트가 필요 없다 (git clone + ./build_all.sh 만 하면 됨).
-#       이 스크립트는 맨 우분투에 다시 구축할 때 사용.
-#       (보행 엔진 /home/ubuntu/software/puppypi_control 과 서보 캘리브레이션은
-#        Hiwonder 이미지에만 있으므로, 맨 우분투만으로는 로봇 구동이 안 된다 —
-#        공부자료/16 의 0절 참고)
-# ─────────────────────────────────────────────────────────────────────────────
+# Install the public PuppyPi ROS2 stack on a fresh Ubuntu 22.04 system.
+# The private Hiwonder gait/IK/servo engine is intentionally not downloaded.
 set -euo pipefail
 
-ROLE="${1:-robot}"   # robot | pc
+ROLE="${1:-robot}" # robot | pc
 WS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LDLIDAR_DIR="$WS/src/ldlidar_stl_ros2"
+LDLIDAR_VERSION="v3.0.3"
 
 if ! grep -q 'VERSION_ID="22.04"' /etc/os-release 2>/dev/null; then
-  echo "[경고] Ubuntu 22.04 가 아닙니다. ROS2 Humble 은 22.04 전용입니다. 계속하려면 Enter, 중단은 Ctrl+C"
-  read -r
+  echo "[오류] Ubuntu 22.04에서만 실행할 수 있습니다."
+  echo "       기존 Noetic 저장장치는 보존하고 새 Ubuntu 22.04 USB로 부팅하세요."
+  exit 1
 fi
 
-echo "[1/5] 기본 도구 + APT 저장소"
+if [ "$ROLE" != "robot" ] && [ "$ROLE" != "pc" ]; then
+  echo "[오류] role은 robot 또는 pc만 가능합니다: $ROLE"
+  exit 1
+fi
+
+if [ "$ROLE" = "robot" ] && [ "$(dpkg --print-architecture)" != "arm64" ]; then
+  echo "[오류] Raspberry Pi 로봇은 Ubuntu 22.04 64-bit(arm64)여야 합니다."
+  exit 1
+fi
+
+ROOT_SOURCE="$(findmnt -n -o SOURCE / 2>/dev/null || echo unknown)"
+echo "[환경] root filesystem: $ROOT_SOURCE"
+if [ "$ROLE" = "robot" ] && [[ "$ROOT_SOURCE" == /dev/mmcblk* ]] && \
+   [ "${PUPPYPI_ALLOW_MMC:-0}" != "1" ]; then
+  echo "[오류] 현재 root filesystem이 SD/eMMC($ROOT_SOURCE)에 있습니다."
+  echo "       Noetic 저장장치를 보호하기 위해 중단합니다. 새 Ubuntu 22.04 USB로 부팅하세요."
+  exit 1
+fi
+
+echo "[1/5] 기본 도구와 ROS2 APT 저장소"
 sudo apt update
 sudo apt install -y software-properties-common curl gnupg lsb-release git locales
 sudo locale-gen en_US en_US.UTF-8
 sudo add-apt-repository -y universe
 
-# ROS2 Humble APT 저장소 등록 (이미 있으면 건너뜀)
-if [ ! -f /usr/share/keyrings/ros-archive-keyring.gpg ]; then
-  sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+if [ ! -f /usr/share/keyrings/ros-archive-keyring.gpg ] || \
+   [ ! -f /etc/apt/sources.list.d/ros2.list ]; then
+  sudo curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
     -o /usr/share/keyrings/ros-archive-keyring.gpg
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo "$UBUNTU_CODENAME") main" \
-    | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
-  sudo apt update
+    | sudo tee /etc/apt/sources.list.d/ros2.list >/dev/null
 fi
+sudo apt update
 
 echo "[2/5] ROS2 Humble 설치 (role=$ROLE)"
 if [ "$ROLE" = "pc" ]; then
-  sudo apt install -y ros-humble-desktop          # rviz2, rqt 포함
+  sudo apt install -y ros-humble-desktop
 else
-  sudo apt install -y ros-humble-ros-base         # GUI 없는 로봇용
+  sudo apt install -y ros-humble-ros-base
 fi
 
-echo "[3/5] 빌드 도구 + 이 프로젝트가 쓰는 ROS 패키지"
+echo "[3/5] 빌드 도구와 프로젝트 의존 패키지"
 sudo apt install -y \
-  ros-dev-tools python3-colcon-common-extensions python3-rosdep python3-pip \
-  build-essential cmake \
-  ros-humble-cv-bridge libopencv-dev \
-  ros-humble-usb-cam \
+  ros-dev-tools \
+  python3-colcon-common-extensions \
+  python3-rosdep \
+  python3-pip \
+  build-essential \
+  cmake \
+  libopencv-dev \
+  ros-humble-cv-bridge \
   ros-humble-image-transport-plugins \
-  ros-humble-slam-toolbox
-# web_video_server: Humble 은 apt 로 제공. 만약 없다는 오류가 나면 소스 빌드:
-#   git clone -b ros2 https://github.com/RobotWebTools/web_video_server "$WS/src/web_video_server"
-sudo apt install -y ros-humble-web-video-server || \
-  echo "[안내] web_video_server apt 미제공 환경 — 위 주석의 소스 빌드 방법 사용"
+  ros-humble-laser-filters \
+  ros-humble-slam-toolbox \
+  ros-humble-usb-cam \
+  ros-humble-web-video-server
 
-echo "[4/5] 파이썬 원본 노드용 라이브러리 (드라이버/조이스틱)"
-pip3 install --user pyserial pygame
+echo "[4/5] Python 런타임과 LD19 공식 드라이버"
+sudo apt install -y \
+  python3-matplotlib \
+  python3-numpy \
+  python3-pygame \
+  python3-serial \
+  python3-transforms3d \
+  python3-yaml
 
-echo "[5/5] rosdep 으로 남은 의존성 자동 해결"
+if [ "$ROLE" = "robot" ]; then
+  if [ ! -e "$LDLIDAR_DIR" ]; then
+    git clone --branch "$LDLIDAR_VERSION" --depth 1 \
+      https://github.com/ldrobotSensorTeam/ldlidar_stl_ros2.git \
+      "$LDLIDAR_DIR"
+  elif [ ! -f "$LDLIDAR_DIR/package.xml" ]; then
+    echo "[오류] $LDLIDAR_DIR 가 존재하지만 유효한 LD19 패키지가 아닙니다."
+    exit 1
+  else
+    echo "  - 기존 LD19 드라이버 사용: $LDLIDAR_DIR"
+  fi
+fi
+
+echo "[5/5] rosdep 의존성 해결"
 # shellcheck disable=SC1091
 source /opt/ros/humble/setup.bash
 sudo rosdep init 2>/dev/null || true
-rosdep update || true
-if [ -d "$WS/src" ]; then
-  rosdep install --from-paths "$WS/src" --ignore-src -r -y || true
-fi
+rosdep update
+rosdep install --from-paths "$WS/src" --ignore-src -r -y
 
 if [ "$ROLE" = "robot" ]; then
-  echo
-  echo "[로봇 전용 추가 설정]"
-  # 장치 이름 고정 (확장보드 /dev/rrc 등)
-  if [ -d "$WS/src/peripherals/scripts" ]; then
-    sudo cp "$WS"/src/peripherals/scripts/*.rules /etc/udev/rules.d/ 2>/dev/null || true
-    sudo udevadm control --reload && sudo udevadm trigger
-    echo "  - udev 규칙 설치 완료 (/dev/rrc 등)"
-  fi
-  # LD19 LiDAR 드라이버 (Hiwonder 이미지 외에는 없음) — 필요 시:
-  #   git clone https://github.com/ldrobotSensorTeam/ldlidar_stl_ros2 "$WS/src/ldlidar_stl_ros2"
+  echo "[로봇] udev 규칙과 장치 그룹 설정"
+  sudo cp "$WS"/src/peripherals/scripts/*.rules /etc/udev/rules.d/
+  sudo usermod -aG dialout,video "$USER"
+  sudo udevadm control --reload-rules
+  sudo udevadm trigger
 fi
 
 echo
-echo "[완료] 다음 순서:"
-echo "  1) 셸 재시작 또는: source /opt/ros/humble/setup.bash"
-echo "  2) ./build_all.sh"
-echo "  3) ./test_all.sh"
-echo "  자세한 경로별 안내: 공부자료/16_빌드_실행_테스트_가이드.md 0절"
+echo "[완료] 공개 의존성과 LD19 드라이버 설치가 끝났습니다."
+echo "  다음 단계: ./build_all.sh"
+echo "  새 그룹 권한 적용: 설치 완료 후 한 번 재부팅"
+echo "  주의: Hiwonder 보행 엔진과 ActionGroups는 설치하거나 Git에 넣지 않습니다."
+if [ "$ROLE" = "robot" ] && [ ! -d /home/ubuntu/software/puppypi_control ]; then
+  echo "  경고: /home/ubuntu/software/puppypi_control 이 없습니다."
+  echo "        빌드는 가능하지만 실제 보행 전 기존 Noetic 장치에서 로컬 복원해야 합니다."
+fi

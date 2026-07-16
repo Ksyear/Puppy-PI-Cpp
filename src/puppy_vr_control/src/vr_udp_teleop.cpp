@@ -32,6 +32,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <csignal>
 #include <cstring>
 #include <mutex>
 #include <optional>
@@ -129,16 +130,29 @@ public:
 
   ~VrUdpTeleop() override
   {
+    shutdown();
+  }
+
+  // 종료 시 안전 정지(Velocity 0)를 한 번 발행하고 자원을 정리한다.
+  // main() 에서 rclcpp::shutdown() *이전에* 호출해야 정지가 puppy_control 에
+  // 실제로 도달한다. puppy_control 의 autogait 은 무신호 워치독이 없어,
+  // 이 노드가 정지 명령 없이 죽으면 로봇이 마지막 속도로 계속 걷는다.
+  // 소멸자에서 재호출되어도 안전하도록 1회만 실행한다.
+  void shutdown()
+  {
+    if (shutdown_done_.exchange(true)) {
+      return;
+    }
     running_ = false;
     if (rx_thread_.joinable()) {
       rx_thread_.join();
     }
-    // 종료 시 안전 정지 명령을 한 번 보낸다
-    if (velocity_pub_) {
+    if (velocity_pub_ && rclcpp::ok()) {
       velocity_pub_->publish(Velocity());
     }
     if (sock_fd_ >= 0) {
       ::close(sock_fd_);
+      sock_fd_ = -1;
     }
   }
 
@@ -357,6 +371,7 @@ private:
   int sock_fd_{-1};
   std::atomic<bool> running_{true};
   std::atomic<bool> estop_{false};
+  std::atomic<bool> shutdown_done_{false};
   std::thread rx_thread_;
 
   std::mutex cmd_mutex_;
@@ -378,11 +393,31 @@ private:
   int stand_tries_{0};
 };
 
+namespace
+{
+// SIGINT/SIGTERM 시 컨텍스트를 즉시 내리지 않고 이 플래그만 세운다.
+// (rclcpp 기본 시그널 핸들러는 컨텍스트를 바로 내려서, spin 반환 뒤 발행하는
+//  종료 안전정지가 유실된다. 그래서 자동 처리를 끄고 직접 받는다.)
+std::atomic<bool> g_shutdown_requested{false};
+void request_shutdown(int /*signum*/) { g_shutdown_requested = true; }
+}  // namespace
+
 int main(int argc, char ** argv)
 {
-  rclcpp::init(argc, argv);
+  rclcpp::init(
+    argc, argv, rclcpp::InitOptions(), rclcpp::SignalHandlerOptions::None);
+  std::signal(SIGINT, request_shutdown);
+  std::signal(SIGTERM, request_shutdown);
+
   auto node = std::make_shared<VrUdpTeleop>();
-  rclcpp::spin(node);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+  while (rclcpp::ok() && !g_shutdown_requested) {
+    executor.spin_once(100ms);
+  }
+
+  node->shutdown();          // 컨텍스트가 유효할 때 안전 정지(Velocity 0) 발행
+  executor.remove_node(node);
   rclcpp::shutdown();
   return 0;
 }

@@ -17,12 +17,18 @@ def generate_launch_description():
     )
 
     use_camera = LaunchConfiguration('use_camera', default='true')
+    use_mapping = LaunchConfiguration('use_mapping', default='false')
     debug = LaunchConfiguration('debug', default='false')
 
     return LaunchDescription([
         DeclareLaunchArgument(
             'use_camera', default_value='true',
             description='카메라 UDP 전송 노드(camera_udp_sender) 실행 여부'),
+        DeclareLaunchArgument(
+            'use_mapping', default_value='false',
+            description='라이다 지도 UDP 전송 노드(map_udp_sender, 포트 5008) 실행 여부. '
+                        'True 로 하려면 lidar_mapping_node 와 LiDAR 가 함께 떠서 /map 을 '
+                        '발행하고 있어야 한다.'),
         DeclareLaunchArgument(
             'debug', default_value='false',
             description='수신/발행 값을 콘솔에 출력'),
@@ -53,5 +59,16 @@ def generate_launch_description():
             name='robot_status_sender',
             output='screen',
             parameters=[config],
+        ),
+
+        # 라이다 지도(/map) → PNG → UDP 청크 전송 (대시보드 하단 지도 패널에 표시, 포트 5008)
+        # lidar_mapping_node 가 /map 을 발행하고 있어야 실제로 지도가 전송된다.
+        Node(
+            package='puppy_vr_control',
+            executable='map_udp_sender',
+            name='map_udp_sender',
+            output='screen',
+            parameters=[config],
+            condition=IfCondition(use_mapping),
         ),
     ])

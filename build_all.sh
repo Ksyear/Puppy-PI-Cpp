@@ -30,6 +30,10 @@ fi
 # 빌드 대상: 이 프로젝트에서 만든 패키지 전부.
 # --packages-up-to 라서 puppy_control_msgs 등 의존 패키지는 자동으로 먼저 빌드됨.
 PKGS=(
+  ldlidar_stl_ros2          # LD19 official C++ driver (fetched by robot setup)
+  sdk                        # Hiwonder public Python board SDK
+  ros_robot_controller       # Hiwonder public Python board node (hybrid runtime)
+  puppy_control              # Hiwonder public Python gait wrapper (hybrid runtime)
   peripherals                # 카메라/LiDAR 설정 (자동실행 launch 가 share 를 참조)
   ros_robot_controller_cpp   # 확장보드 시리얼 드라이버 (C++)
   puppy_control_cpp          # 제어 래퍼 (C++, 보행엔진은 스텁 상태)
@@ -40,6 +44,13 @@ PKGS=(
   puppy_vr_control           # VR 조종/영상/상태 전송 (C++)
   puppy_vr_control_py        # 위와 동일 기능의 파이썬판
 )
+
+if [ ! -f "$WS/src/ldlidar_stl_ros2/package.xml" ]; then
+  echo "[오류] LD19 드라이버가 없습니다."
+  echo "  CMake 전체 설치: cmake --build cmake-build --target robot"
+  echo "  의존성만 설치:  cmake --build cmake-build --target robot_deps"
+  exit 1
+fi
 
 echo "[빌드] ${PKGS[*]}"
 # Pi 4 는 RAM 이 작아 병렬 2개로 제한 (스왑 폭주 방지)

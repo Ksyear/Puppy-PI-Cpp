@@ -11,7 +11,7 @@ Quest 앱과 **완전히 동일한 UDP 프로토콜**로 동작하므로,
   가상 조이스틱/키보드 ──"X:..,Z:.."──▶ :5005 vr_udp_teleop → 로봇 이동
   ESTOP/RESUME 버튼 ────────────────▶ :5005
   영상 표시 ◀────── JPEG 청크 ─────── :5006 camera_udp_sender
-  배터리/RSSI/연결 ◀── 상태 문자열 ── :5007 robot_status_sender
+  RSSI/연결 상태 ◀──── 상태 문자열 ── :5007 robot_status_sender
 
 사용법:
   pip3 install pygame                    # 최초 1회 (이것만 필요)
@@ -89,7 +89,7 @@ class FrameAssembler:
 
 
 def parse_status(text):
-    """'BAT:7400;BAT_AGE:0.4;RSSI:-52;UP:123' → dict"""
+    """'RSSI:-52;UP:123' → dict"""
     out = {}
     for part in text.split(';'):
         key, _, val = part.partition(':')
@@ -133,8 +133,8 @@ def selftest():
     r = fa2.feed(struct.pack('!IHHI', 2, 0, 1, 3) + b'abc')          # 프레임2 완성
     assert r == b'abc', '유실 처리 실패'
     # 상태 파싱
-    st = parse_status('BAT:7400;BAT_AGE:0.4;RSSI:-52;UP:123')
-    assert st['BAT'] == '7400' and st['RSSI'] == '-52'
+    st = parse_status('RSSI:-52;UP:123')
+    assert st['RSSI'] == '-52' and st['UP'] == '123'
     # 예상 명령: Z=+45° 풀틸트 → 전진 15cm/s / 데드존 안 → 0
     assert expected_robot_command(0.0, 45.0) == (15.0, 0.0)
     assert expected_robot_command(3.0, 3.0) == (0.0, 0.0)
@@ -163,7 +163,6 @@ class Dashboard:
         self.lock = threading.Lock()
         self.latest_jpeg = None
         self.latest_map = None
-        self.view_map = False
         self.video_frames = 0
         self.video_fps = 0.0
         self.status = {}
@@ -260,7 +259,7 @@ class Dashboard:
     def run(self):
         import pygame  # GUI 가 필요할 때만 import (selftest 는 pygame 불필요)
         pygame.init()
-        screen = pygame.display.set_mode((1020, 540))
+        screen = pygame.display.set_mode((1020, 700))
         pygame.display.set_caption('PuppyPi VR Test Dashboard  (robot: %s)' % self.robot)
         clock = pygame.time.Clock()
         font = pygame.font.SysFont('monospace', 16)
@@ -292,8 +291,6 @@ class Dashboard:
                         self.send_ctrl('RESUME')
                     elif ev.key == pygame.K_p:
                         self.tx_paused = not self.tx_paused
-                    elif ev.key == pygame.K_m:
-                        self.view_map = not self.view_map
                 elif ev.type == pygame.MOUSEBUTTONDOWN:
                     dx = ev.pos[0] - joy_center[0]
                     dy = ev.pos[1] - joy_center[1]
@@ -338,29 +335,41 @@ class Dashboard:
             # ── 그리기 ──
             screen.fill((24, 26, 30))
 
-            # 영상 (좌측 640x480)
+            # 카메라 영상(위) + 라이다 지도(아래) — 둘 다 항상 화면에 표시
             with self.lock:
-                jpeg = self.latest_map if self.view_map else self.latest_jpeg
+                jpeg_cam = self.latest_jpeg
+                jpeg_map = self.latest_map
                 fps = self.video_fps
                 status = dict(self.status)
                 status_age = time.monotonic() - self.last_status_time if self.last_status_time else 1e9
-            video_rect = pygame.Rect(10, 10, 640, 480)
-            if jpeg:
-                try:
-                    img = pygame.image.load(io.BytesIO(jpeg))
-                    img = pygame.transform.smoothscale(img, (640, 480))
-                    screen.blit(img, video_rect.topleft)
-                except Exception:
-                    pass
-            else:
-                pygame.draw.rect(screen, (40, 42, 48), video_rect)
-                wait_msg = 'NO MAP (waiting :5008... use_mapping:=true?)' if self.view_map \
-                    else 'NO VIDEO (waiting :5006...)'
-                screen.blit(font.render(wait_msg, True, (140, 140, 140)), (170, 240))
-            pygame.draw.rect(screen, (70, 74, 84), video_rect, 2)
-            screen.blit(font.render(
-                'MAP  [M: camera]' if self.view_map else 'CAMERA  [M: map]',
-                True, (240, 210, 90) if self.view_map else (150, 150, 150)), (18, 16))
+
+            def draw_panel(rect, jpeg, label, label_col, smooth, wait_msg):
+                if jpeg:
+                    try:
+                        img = pygame.image.load(io.BytesIO(jpeg))
+                        iw, ih = img.get_size()
+                        # 종횡비 보존(레터박스): 카메라는 안 찌그러지고 정사각 지도도 형태 유지
+                        s = min(rect.w / iw, rect.h / ih)
+                        tw, th = max(1, int(iw * s)), max(1, int(ih * s))
+                        scaler = pygame.transform.smoothscale if smooth else pygame.transform.scale
+                        img = scaler(img, (tw, th))   # 지도는 nearest 로 격자를 또렷하게
+                        screen.blit(img, (rect.x + (rect.w - tw) // 2,
+                                          rect.y + (rect.h - th) // 2))
+                    except Exception:
+                        pass
+                else:
+                    pygame.draw.rect(screen, (40, 42, 48), rect)
+                    screen.blit(font.render(wait_msg, True, (140, 140, 140)),
+                                (rect.x + 16, rect.y + rect.h // 2 - 8))
+                pygame.draw.rect(screen, (70, 74, 84), rect, 2)
+                screen.blit(font.render(label, True, label_col), (rect.x + 8, rect.y + 6))
+
+            cam_rect = pygame.Rect(10, 10, 640, 320)
+            map_rect = pygame.Rect(10, 340, 640, 320)
+            draw_panel(cam_rect, jpeg_cam, 'CAMERA  (:5006)', (150, 150, 150),
+                       True, 'NO VIDEO (waiting :5006...)')
+            draw_panel(map_rect, jpeg_map, 'LiDAR MAP  (:5008)', (240, 210, 90),
+                       False, 'NO MAP  (run mapping on robot: use_mapping:=true)')
 
             # 가상 조이스틱
             pygame.draw.circle(screen, (46, 50, 58), joy_center, joy_radius)
@@ -372,7 +381,6 @@ class Dashboard:
 
             # 상태 패널
             robot_link = status_age < 3.0
-            bat_mv = int(status.get('BAT', -1)) if status.get('BAT', '').lstrip('-').isdigit() else -1
             vx, vyaw = expected_robot_command(x_angle, z_angle)
 
             def line(i, text, color=(210, 210, 210)):
@@ -380,18 +388,13 @@ class Dashboard:
 
             link_col = (90, 220, 120) if robot_link else (230, 80, 80)
             line(0, 'ROBOT LINK : %s' % ('OK (%.1fs)' % status_age if robot_link else 'LOST'), link_col)
-            if bat_mv > 0:
-                bat_col = (90, 220, 120) if bat_mv >= 7000 else (240, 180, 60) if bat_mv >= 6600 else (230, 80, 80)
-                line(1, 'BATTERY    : %.2f V %s' % (bat_mv / 1000.0, '(LOW!)' if bat_mv < 7000 else ''), bat_col)
-            else:
-                line(1, 'BATTERY    : --', (150, 150, 150))
-            line(2, 'WIFI RSSI  : %s dBm   UPTIME: %ss' % (status.get('RSSI', '--'), status.get('UP', '--')))
-            line(3, 'VIDEO      : %d fps' % fps, (90, 220, 120) if fps > 0 else (150, 150, 150))
-            line(4, 'TX         : %s' % ('PAUSED (P)' if self.tx_paused else '%.0f Hz -> :%d' % (self.SEND_HZ, CTRL_PORT)),
+            line(1, 'WIFI RSSI  : %s dBm   UPTIME: %ss' % (status.get('RSSI', '--'), status.get('UP', '--')))
+            line(2, 'VIDEO      : %d fps' % fps, (90, 220, 120) if fps > 0 else (150, 150, 150))
+            line(3, 'TX         : %s' % ('PAUSED (P)' if self.tx_paused else '%.0f Hz -> :%d' % (self.SEND_HZ, CTRL_PORT)),
                  (240, 180, 60) if self.tx_paused else (210, 210, 210))
-            line(5, 'SEND ANGLE : X=%+6.1f  Z=%+6.1f' % (x_angle, z_angle))
-            line(6, 'EXPECT CMD : vx=%+5.1f cm/s  yaw=%+5.2f rad/s' % (vx, vyaw), (120, 190, 255))
-            line(8, '[SPACE] ESTOP  [R] resume  [P] pause-TX  [M] map  [ESC] quit', (150, 150, 150))
+            line(4, 'SEND ANGLE : X=%+6.1f  Z=%+6.1f' % (x_angle, z_angle))
+            line(5, 'EXPECT CMD : vx=%+5.1f cm/s  yaw=%+5.2f rad/s' % (vx, vyaw), (120, 190, 255))
+            line(7, '[SPACE] ESTOP  [R] resume  [P] pause-TX  [ESC] quit', (150, 150, 150))
 
             if self.estop:
                 screen.blit(big.render('E-STOP ACTIVE  (press R)', True, (255, 70, 70)), (660, 20))
@@ -400,10 +403,6 @@ class Dashboard:
             else:
                 screen.blit(big.render('DRIVING ENABLED', True, (90, 220, 120)), (660, 20))
 
-            # 로봇 쪽 저전압 보호가 발동하면 최우선으로 경고
-            if status.get('LOW') == '1':
-                screen.blit(big.render('LOW BATTERY - CHARGE NOW!', True, (255, 70, 70)), (660, 52))
-
             pygame.display.flip()
 
         # 종료: 정지 패킷을 확실히 보내고 소켓 정리
@@ -411,7 +410,7 @@ class Dashboard:
             self.send_ctrl('X:0.0,Z:0.0')
             time.sleep(0.02)
         pygame.quit()
-        for s in (self.ctrl_sock, self.video_sock, self.status_sock):
+        for s in (self.ctrl_sock, self.video_sock, self.status_sock, self.map_sock):
             try:
                 s.close()
             except OSError:
@@ -438,8 +437,10 @@ def main():
         print('pygame 이 필요합니다:  pip3 install pygame')
         sys.exit(1)
 
-    print('대시보드 시작 — 로봇: %s (조종:%d 영상:%d 상태:%d)' % (
-        args.robot, CTRL_PORT, VIDEO_PORT, STATUS_PORT))
+    print('대시보드 시작 — 로봇: %s (조종:%d 영상:%d 상태:%d 지도:%d)' % (
+        args.robot, CTRL_PORT, VIDEO_PORT, STATUS_PORT, MAP_PORT))
+    print('  카메라(위) + 라이다 지도(아래)가 한 화면에 함께 표시됨 '
+          '(지도는 로봇에서 use_mapping:=true 실행 필요)')
     Dashboard(args.robot, max_tilt=args.max_tilt, ramp=args.ramp).run()
 
 

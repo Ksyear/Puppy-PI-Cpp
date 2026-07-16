@@ -13,7 +13,9 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(puppy_control_msgs REQUIRED)
+find_package(OpenCV REQUIRED COMPONENTS core imgcodecs)
 
 include_directories(include)
 
@@ -29,10 +31,16 @@ ament_target_dependencies(camera_udp_sender rclcpp sensor_msgs)
 add_executable(robot_status_sender src/robot_status_sender.cpp)
 ament_target_dependencies(robot_status_sender rclcpp std_msgs)
 
+# /map(OccupancyGrid) → PNG → UDP 청크 전송 (대시보드/Quest 지도 표시용, 포트 5008)
+add_executable(map_udp_sender src/map_udp_sender.cpp)
+ament_target_dependencies(map_udp_sender rclcpp nav_msgs)
+target_link_libraries(map_udp_sender ${OpenCV_LIBS})
+
 install(TARGETS
   vr_udp_teleop
   camera_udp_sender
   robot_status_sender
+  map_udp_sender
   DESTINATION lib/${PROJECT_NAME}
 )
 
