@@ -1,8 +1,8 @@
-# noetic_fallback — [비상용 3안] ROS1 Noetic 용 VR 조종
+# PuppyPi ROS1 Noetic 실행 코드
 
-**이 폴더는 비상용입니다.** 기본 계획(2안: ROS2 Humble 환경 구축)이 준비되기 전,
-지금 로봇에 꽂혀 있는 **ROS1(Noetic) 이미지 그대로** VR 조종을 돌려야 할 때만 씁니다.
-ROS2 환경이 완성되면 이 폴더는 사용하지 않습니다.
+이 폴더가 현재 PuppyPi(Raspberry Pi 4, Debian 10, ROS1 Noetic)의 주 개발 경로다.
+VR 조종·영상·상태 전송뿐 아니라 LiDAR 지도작성과 자율 미로 탐색을 포함한다.
+저장소의 ROS2 코드는 참고용 레거시로 취급한다.
 
 - UDP 프로토콜(조종 5005 / 영상 5006 / 상태 5007, ESTOP/RESUME 포함)은
   ROS2판과 **완전히 동일** — Unity(Quest) 앱은 아무것도 바꿀 필요 없음
@@ -78,6 +78,9 @@ roslaunch puppy_vr_control_noetic vr_control.launch
 # 조종만 / 디버그
 roslaunch puppy_vr_control_noetic vr_control.launch use_camera:=false debug:=true
 ```
+
+자율 미로 탐색은 VR 노드와 동시에 실행하지 않는다. 상세 사용법과 안전 절차는
+[`puppy_vr_control_noetic/README_MAZE.md`](./puppy_vr_control_noetic/README_MAZE.md)를 참고한다.
 
 ## 테스트 (ROS1 이므로 rostopic 사용)
 

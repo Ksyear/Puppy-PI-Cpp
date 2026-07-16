@@ -29,7 +29,9 @@ import time
 
 import numpy as np
 import rospy
+import tf
 
+from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import OccupancyGrid
 from sensor_msgs.msg import LaserScan
 from std_srvs.srv import Trigger, TriggerResponse
@@ -220,6 +222,10 @@ class LidarMappingNode(object):
         self.chunk_size = rospy.get_param('~chunk_size', 1400)
         self.save_dir = os.path.expanduser(rospy.get_param('~map_save_path', '~/maps'))
         self.map_name = rospy.get_param('~map_name', 'ros1_map')
+        self.map_frame = rospy.get_param('~map_frame', 'map')
+        self.base_frame = rospy.get_param('~base_frame', 'base_footprint')
+        self.pose_topic = rospy.get_param('~pose_topic', '/lidar_mapping/pose')
+        self.publish_tf = rospy.get_param('~publish_tf', True)
         # 로봇 중심 지도 뷰에서 로봇 주변으로 보여줄 범위(m). 작을수록 확대됨.
         self.view_m = rospy.get_param('~view_m', 6.0)
 
@@ -238,6 +244,8 @@ class LidarMappingNode(object):
         threading.Thread(target=self.hello_loop, daemon=True).start()
 
         self.map_pub = rospy.Publisher('/map', OccupancyGrid, queue_size=1, latch=True)
+        self.pose_pub = rospy.Publisher(self.pose_topic, PoseStamped, queue_size=1)
+        self.tf_broadcaster = tf.TransformBroadcaster()
         rospy.Service('~save_map', Trigger, self.save_map)
         rospy.Timer(rospy.Duration(self.map_send_period), self.publish_and_send)
 
@@ -277,7 +285,30 @@ class LidarMappingNode(object):
             return
         pts = np.stack([r[ok] * np.cos(a[ok]), r[ok] * np.sin(a[ok])], axis=1)
         with self.lock:
-            self.mapper.process(pts)
+            pose = self.mapper.process(pts).copy()
+        self.publish_pose(pose, msg.header.stamp)
+
+    def publish_pose(self, pose, stamp):
+        """스캔매칭 자세를 자율주행 노드가 사용할 수 있도록 토픽과 TF로 공개."""
+        if stamp == rospy.Time():
+            stamp = rospy.Time.now()
+        quat = tf.transformations.quaternion_from_euler(0.0, 0.0, float(pose[2]))
+
+        msg = PoseStamped()
+        msg.header.stamp = stamp
+        msg.header.frame_id = self.map_frame
+        msg.pose.position.x = float(pose[0])
+        msg.pose.position.y = float(pose[1])
+        msg.pose.orientation.x = quat[0]
+        msg.pose.orientation.y = quat[1]
+        msg.pose.orientation.z = quat[2]
+        msg.pose.orientation.w = quat[3]
+        self.pose_pub.publish(msg)
+
+        if self.publish_tf:
+            self.tf_broadcaster.sendTransform(
+                (float(pose[0]), float(pose[1]), 0.0), quat, stamp,
+                self.base_frame, self.map_frame)
 
     def hello_loop(self):
         while self.running and not rospy.is_shutdown():
@@ -302,7 +333,7 @@ class LidarMappingNode(object):
         # 1) ROS 토픽 (rviz / rosbridge 용)
         grid = OccupancyGrid()
         grid.header.stamp = rospy.Time.now()
-        grid.header.frame_id = 'map'
+        grid.header.frame_id = self.map_frame
         grid.info.resolution = self.mapper.res
         grid.info.width = grid.info.height = self.mapper.n
         grid.info.origin.position.x = self.mapper.origin

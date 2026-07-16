@@ -1,0 +1,35 @@
+<launch>
+  <!-- VR/수동 조종 노드와 동시에 실행하지 않는다. 기본값은 안전하게 정지 상태. -->
+  <arg name="start_mapper" default="true"/>
+  <arg name="autostart" default="false"/>
+  <arg name="use_llm" default="false"/>
+  <arg name="llama_server_url" default="http://127.0.0.1:8081/completion"/>
+  <arg name="scan_topic" default="/scan"/>
+  <arg name="velocity_topic" default="/puppy_control/velocity"/>
+  <arg name="map_size_m" default="12.0"/>
+  <arg name="resolution" default="0.05"/>
+  <arg name="laser_yaw" default="0.0"/>
+  <arg name="forward_speed" default="6.0"/>
+
+  <group if="$(arg start_mapper)">
+    <node name="lidar_mapping" pkg="puppy_vr_control_noetic"
+          type="lidar_mapping.py" output="screen">
+      <param name="scan_topic" value="$(arg scan_topic)"/>
+      <param name="map_size_m" value="$(arg map_size_m)"/>
+      <param name="resolution" value="$(arg resolution)"/>
+      <param name="laser_yaw" value="$(arg laser_yaw)"/>
+      <param name="pose_topic" value="/lidar_mapping/pose"/>
+      <param name="publish_tf" value="true"/>
+    </node>
+  </group>
+
+  <node name="maze_autonomy" pkg="puppy_vr_control_noetic"
+        type="maze_autonomy.py" output="screen">
+    <param name="autostart" value="$(arg autostart)"/>
+    <param name="use_llm" value="$(arg use_llm)"/>
+    <param name="llama_server_url" value="$(arg llama_server_url)"/>
+    <param name="scan_topic" value="$(arg scan_topic)"/>
+    <param name="velocity_topic" value="$(arg velocity_topic)"/>
+    <param name="forward_speed" value="$(arg forward_speed)"/>
+  </node>
+</launch>
