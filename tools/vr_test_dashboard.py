@@ -259,14 +259,22 @@ class Dashboard:
     def run(self):
         import pygame  # GUI 가 필요할 때만 import (selftest 는 pygame 불필요)
         pygame.init()
-        screen = pygame.display.set_mode((1020, 700))
+        MIN_W, MIN_H = 640, 480
+        # 작은 노트북에서도 들어가도록 기본 창을 줄이고 리사이즈 허용
+        screen = pygame.display.set_mode((960, 620), pygame.RESIZABLE)
         pygame.display.set_caption('PuppyPi VR Test Dashboard  (robot: %s)' % self.robot)
         clock = pygame.time.Clock()
-        font = pygame.font.SysFont('monospace', 16)
-        big = pygame.font.SysFont('monospace', 26, bold=True)
 
-        joy_center = (830, 190)
-        joy_radius = 95
+        # 폰트는 창 크기에 맞춰 만들고 캐시 (매 프레임 재생성 방지)
+        _font_cache = {}
+
+        def get_font(size, bold=False):
+            f = _font_cache.get((size, bold))
+            if f is None:
+                f = pygame.font.SysFont('monospace', size, bold=bold)
+                _font_cache[(size, bold)] = f
+            return f
+
         knob = [0.0, 0.0]      # 목표 입력 (오른쪽+, 위쪽+) — -1..1
         sx, sy = 0.0, 0.0      # 램프가 적용된 실제 송신값
         dragging = False
@@ -274,9 +282,39 @@ class Dashboard:
 
         while self.running:
             dt = clock.tick(60) / 1000.0
+            W, H = screen.get_size()
+
+            # ── 창 크기에 맞춘 반응형 레이아웃 (매 프레임 계산) ──
+            m = 10
+            right_w = min(max(int(W * 0.34), 210), 460)   # 오른쪽 상태/조이스틱 열
+            left_w = max(160, W - right_w - 3 * m)         # 왼쪽 영상/지도 열
+            avail_h = H - 3 * m
+            cam_h = avail_h // 2
+            map_h = avail_h - cam_h
+            cam_rect = pygame.Rect(m, m, left_w, cam_h)
+            map_rect = pygame.Rect(m, 2 * m + cam_h, left_w, map_h)
+
+            rx = left_w + 2 * m
+            fs = max(11, min(16, right_w // 22))           # 본문 폰트
+            fs_big = max(15, min(24, right_w // 13))        # 배너 폰트
+            font = get_font(fs)
+            big = get_font(fs_big, bold=True)
+            lh = fs + 6
+
+            banner_y = m
+            joy_radius = max(45, min(right_w // 2 - 15, H // 6))
+            joy_cx = rx + right_w // 2
+            joy_cy = banner_y + fs_big + 16 + joy_radius
+            joy_center = (joy_cx, joy_cy)
+            text_x = rx
+            text_y0 = joy_cy + joy_radius + fs + 18
+
             for ev in pygame.event.get():
                 if ev.type == pygame.QUIT:
                     self.running = False
+                elif ev.type == pygame.VIDEORESIZE:
+                    screen = pygame.display.set_mode(
+                        (max(MIN_W, ev.w), max(MIN_H, ev.h)), pygame.RESIZABLE)
                 elif ev.type == pygame.KEYDOWN:
                     if ev.key == pygame.K_ESCAPE:
                         self.running = False
@@ -360,48 +398,49 @@ class Dashboard:
                 else:
                     pygame.draw.rect(screen, (40, 42, 48), rect)
                     screen.blit(font.render(wait_msg, True, (140, 140, 140)),
-                                (rect.x + 16, rect.y + rect.h // 2 - 8))
+                                (rect.x + 14, rect.y + rect.h // 2 - fs))
                 pygame.draw.rect(screen, (70, 74, 84), rect, 2)
                 screen.blit(font.render(label, True, label_col), (rect.x + 8, rect.y + 6))
 
-            cam_rect = pygame.Rect(10, 10, 640, 320)
-            map_rect = pygame.Rect(10, 340, 640, 320)
-            draw_panel(cam_rect, jpeg_cam, 'CAMERA  (:5006)', (150, 150, 150),
-                       True, 'NO VIDEO (waiting :5006...)')
-            draw_panel(map_rect, jpeg_map, 'LiDAR MAP  (:5008)', (240, 210, 90),
-                       False, 'NO MAP  (run mapping on robot: use_mapping:=true)')
+            draw_panel(cam_rect, jpeg_cam, 'CAMERA  :5006', (150, 150, 150),
+                       True, 'NO VIDEO (:5006)')
+            draw_panel(map_rect, jpeg_map, 'LiDAR MAP  :5008', (240, 210, 90),
+                       False, 'NO MAP (use_mapping:=true)')
 
             # 가상 조이스틱
             pygame.draw.circle(screen, (46, 50, 58), joy_center, joy_radius)
             pygame.draw.circle(screen, (90, 96, 110), joy_center, joy_radius, 2)
-            kx_px = int(joy_center[0] + sx * (joy_radius - 18))
-            ky_px = int(joy_center[1] - sy * (joy_radius - 18))
-            pygame.draw.circle(screen, (200, 60, 60) if self.estop else (80, 160, 255), (kx_px, ky_px), 16)
-            screen.blit(font.render('drag / WASD', True, (150, 150, 150)), (joy_center[0] - 50, joy_center[1] + joy_radius + 8))
+            knob_r = max(8, joy_radius // 6)
+            kx_px = int(joy_cx + sx * (joy_radius - knob_r))
+            ky_px = int(joy_cy - sy * (joy_radius - knob_r))
+            pygame.draw.circle(screen, (200, 60, 60) if self.estop else (80, 160, 255), (kx_px, ky_px), knob_r)
+            lbl = font.render('drag / WASD', True, (150, 150, 150))
+            screen.blit(lbl, (joy_cx - lbl.get_width() // 2, joy_cy + joy_radius + 6))
 
             # 상태 패널
             robot_link = status_age < 3.0
             vx, vyaw = expected_robot_command(x_angle, z_angle)
 
             def line(i, text, color=(210, 210, 210)):
-                screen.blit(font.render(text, True, color), (668, 320 + i * 22))
+                screen.blit(font.render(text, True, color), (text_x, text_y0 + i * lh))
 
             link_col = (90, 220, 120) if robot_link else (230, 80, 80)
-            line(0, 'ROBOT LINK : %s' % ('OK (%.1fs)' % status_age if robot_link else 'LOST'), link_col)
-            line(1, 'WIFI RSSI  : %s dBm   UPTIME: %ss' % (status.get('RSSI', '--'), status.get('UP', '--')))
-            line(2, 'VIDEO      : %d fps' % fps, (90, 220, 120) if fps > 0 else (150, 150, 150))
-            line(3, 'TX         : %s' % ('PAUSED (P)' if self.tx_paused else '%.0f Hz -> :%d' % (self.SEND_HZ, CTRL_PORT)),
+            line(0, 'LINK  : %s' % ('OK (%.1fs)' % status_age if robot_link else 'LOST'), link_col)
+            line(1, 'RSSI  : %s  UP:%ss' % (status.get('RSSI', '--'), status.get('UP', '--')))
+            line(2, 'VIDEO : %d fps' % fps, (90, 220, 120) if fps > 0 else (150, 150, 150))
+            line(3, 'TX    : %s' % ('PAUSED (P)' if self.tx_paused else '%.0fHz ->:%d' % (self.SEND_HZ, CTRL_PORT)),
                  (240, 180, 60) if self.tx_paused else (210, 210, 210))
-            line(4, 'SEND ANGLE : X=%+6.1f  Z=%+6.1f' % (x_angle, z_angle))
-            line(5, 'EXPECT CMD : vx=%+5.1f cm/s  yaw=%+5.2f rad/s' % (vx, vyaw), (120, 190, 255))
-            line(7, '[SPACE] ESTOP  [R] resume  [P] pause-TX  [ESC] quit', (150, 150, 150))
+            line(4, 'ANGLE : X=%+5.1f Z=%+5.1f' % (x_angle, z_angle))
+            line(5, 'CMD   : vx=%+5.1f yaw=%+5.2f' % (vx, vyaw), (120, 190, 255))
+            line(7, 'SPACE=ESTOP  R=resume', (150, 150, 150))
+            line(8, 'P=pauseTX  ESC=quit', (150, 150, 150))
 
             if self.estop:
-                screen.blit(big.render('E-STOP ACTIVE  (press R)', True, (255, 70, 70)), (660, 20))
+                screen.blit(big.render('E-STOP (R)', True, (255, 70, 70)), (rx, banner_y))
             elif self.tx_paused:
-                screen.blit(big.render('TX PAUSED - watchdog test', True, (240, 180, 60)), (660, 20))
+                screen.blit(big.render('TX PAUSED (P)', True, (240, 180, 60)), (rx, banner_y))
             else:
-                screen.blit(big.render('DRIVING ENABLED', True, (90, 220, 120)), (660, 20))
+                screen.blit(big.render('DRIVING', True, (90, 220, 120)), (rx, banner_y))
 
             pygame.display.flip()
 

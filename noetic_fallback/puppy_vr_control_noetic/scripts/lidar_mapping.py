@@ -158,25 +158,45 @@ class Mapper(object):
         p[~self.known] = -1
         return p
 
-    def render_bgr(self, scale=2):
-        """대시보드 전송용 이미지: 흰=빈공간, 검=벽, 회색=미탐사 + 로봇 자세(빨강)."""
-        img = np.full((self.n, self.n), 205, dtype=np.uint8)   # 미탐사 회색
-        occ = self.occupancy()
-        img[(occ >= 0) & (occ <= 25)] = 254
-        img[occ >= 65] = 0
-        img = np.flipud(img)                                    # 이미지 y축은 아래로
+    def render_bgr(self, view_m=6.0, scale=3):
+        """대시보드 전송용 이미지 (로봇 중심 시점).
+        로봇을 **항상 화면 정중앙에 고정**하고 주변 view_m×view_m 영역만 잘라 보낸다.
+        로봇이 움직이면 지도가 로봇 밑에서 스크롤되므로 로봇이 화면 밖으로 사라지지 않는다.
+        흰=빈공간, 검=벽, 회색=미탐사, 로봇=빨강 화살표(중앙)."""
         if cv2 is None:
             return None
-        bgr = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        bgr = cv2.resize(bgr, (self.n * scale, self.n * scale),
-                         interpolation=cv2.INTER_NEAREST)
-        # 로봇 위치/방향 표시
-        cx = int((self.pose[0] - self.origin) / self.res) * scale
-        cy = (self.n - 1 - int((self.pose[1] - self.origin) / self.res)) * scale
-        hx = cx + int(12 * math.cos(-self.pose[2]))
-        hy = cy + int(12 * math.sin(-self.pose[2]))
-        cv2.circle(bgr, (cx, cy), 5, (0, 0, 255), -1)
-        cv2.line(bgr, (cx, cy), (hx, hy), (0, 0, 255), 2)
+        # 1) 전체 점유격자 → 회색조 (아직 상하반전 전: [cy, cx])
+        occ = self.occupancy()
+        full = np.full((self.n, self.n), 205, dtype=np.uint8)   # 미탐사 회색
+        full[(occ >= 0) & (occ <= 25)] = 254
+        full[occ >= 65] = 0
+
+        # 2) 로봇 셀을 중심으로 view_cells×view_cells 창을 잘라냄 (지도 밖은 회색 패딩).
+        #    홀수로 맞춰 로봇이 정확히 중앙 셀에 오게 한다.
+        view_cells = max(21, int(view_m / self.res)) | 1
+        cc = view_cells // 2
+        irx = int((self.pose[0] - self.origin) / self.res)
+        iry = int((self.pose[1] - self.origin) / self.res)
+        crop = np.full((view_cells, view_cells), 205, dtype=np.uint8)
+        sr0, sc0 = iry - cc, irx - cc          # 창 좌상단이 가리키는 전체격자 인덱스
+        r0, r1 = max(0, sr0), min(self.n, sr0 + view_cells)
+        c0, c1 = max(0, sc0), min(self.n, sc0 + view_cells)
+        if r1 > r0 and c1 > c0:
+            crop[r0 - sr0:r1 - sr0, c0 - sc0:c1 - sc0] = full[r0:r1, c0:c1]
+
+        # 3) 이미지 y축은 아래로 → 상하반전 후 확대(격자 또렷하게 nearest)
+        crop = np.flipud(crop)
+        bgr = cv2.cvtColor(crop, cv2.COLOR_GRAY2BGR)
+        out = view_cells * scale
+        bgr = cv2.resize(bgr, (out, out), interpolation=cv2.INTER_NEAREST)
+
+        # 4) 로봇은 항상 정중앙 — 방향 화살표(로봇 heading) 표시
+        c = out // 2
+        L = max(10, out // 12)
+        hx = int(c + L * math.cos(-self.pose[2]))
+        hy = int(c + L * math.sin(-self.pose[2]))
+        cv2.circle(bgr, (c, c), max(4, L // 3), (0, 0, 255), -1)
+        cv2.line(bgr, (c, c), (hx, hy), (0, 0, 255), 2)
         return bgr
 
 
@@ -200,6 +220,8 @@ class LidarMappingNode(object):
         self.chunk_size = rospy.get_param('~chunk_size', 1400)
         self.save_dir = os.path.expanduser(rospy.get_param('~map_save_path', '~/maps'))
         self.map_name = rospy.get_param('~map_name', 'ros1_map')
+        # 로봇 중심 지도 뷰에서 로봇 주변으로 보여줄 범위(m). 작을수록 확대됨.
+        self.view_m = rospy.get_param('~view_m', 6.0)
 
         self.mapper = Mapper(size_m, resolution)
         self.lock = threading.Lock()
@@ -275,7 +297,7 @@ class LidarMappingNode(object):
             if not self.mapper.initialized:
                 return
             occ = self.mapper.occupancy()
-            bgr = self.mapper.render_bgr()
+            bgr = self.mapper.render_bgr(view_m=self.view_m)
 
         # 1) ROS 토픽 (rviz / rosbridge 용)
         grid = OccupancyGrid()

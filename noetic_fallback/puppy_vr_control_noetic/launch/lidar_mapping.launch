@@ -5,10 +5,12 @@
   <arg name="map_size_m" default="12.0"/>
   <arg name="resolution" default="0.05"/>
   <arg name="laser_yaw" default="0.0"/>   <!-- LiDAR 가 거꾸로 장착이면 3.14159 -->
+  <arg name="view_m" default="6.0"/>      <!-- 로봇 중심 지도에서 보여줄 주변 범위(m). 작을수록 확대 -->
 
   <node name="lidar_mapping" pkg="puppy_vr_control_noetic" type="lidar_mapping.py" output="screen">
     <param name="map_size_m" value="$(arg map_size_m)"/>
     <param name="resolution" value="$(arg resolution)"/>
     <param name="laser_yaw" value="$(arg laser_yaw)"/>
+    <param name="view_m" value="$(arg view_m)"/>
   </node>
 </launch>
