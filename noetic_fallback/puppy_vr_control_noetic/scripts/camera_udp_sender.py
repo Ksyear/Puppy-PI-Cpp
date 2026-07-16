@@ -9,6 +9,12 @@ ROS2판과 동일한 JPEG 청크 UDP 프로토콜 (5006, hello 자동 발견).
 
 패킷: [uint32 frame_id][uint16 chunk_idx][uint16 chunk_cnt][uint32 frame_size][JPEG조각]
 (빅엔디언, ROS2판과 동일 — Unity 수신 코드 재사용 가능)
+
+레트로(옛날 TV) 효과 — retro_effect.py:
+  전송 직전에 잔상(phosphor)+주사선+비네트+색수차+x2 업스케일을 적용한다.
+  AI 가 아닌 고전 영상처리라 Pi 에서 실시간. ~retro:=false 로 끄면 원본 그대로.
+  x2 업스케일은 JPEG 가 커져 Wi-Fi 대역폭 ~3배 / fps 하락이 있을 수 있음
+  → 대역폭이 문제면 ~retro_upscale:=1.0 (효과는 유지, 해상도만 원본).
 """
 
 import socket
@@ -35,8 +41,19 @@ class CameraUdpSender(object):
         self.max_fps = rospy.get_param('~max_fps', 15.0)
         self.chunk_size = rospy.get_param('~chunk_size', 1400)
         self.client_timeout_sec = rospy.get_param('~client_timeout_sec', 5.0)
-        self.jpeg_quality = rospy.get_param('~jpeg_quality', 80)  # 원본 직접 인코딩 시 화질
+        self.jpeg_quality = rospy.get_param('~jpeg_quality', 80)  # 재인코딩 화질
         self.bridge = None
+
+        # 레트로(옛날 TV) 효과 — retro_effect.py 참고. cv2/numpy 없으면 자동 폴백.
+        self.retro = rospy.get_param('~retro', True)
+        self.retro_params = dict(
+            ghost=rospy.get_param('~retro_ghost', 0.65),
+            scanline=rospy.get_param('~retro_scanline', 0.35),
+            vignette=rospy.get_param('~retro_vignette', 0.35),
+            chroma=int(rospy.get_param('~retro_chroma', 2)),
+            upscale=rospy.get_param('~retro_upscale', 2.0))
+        self.fx = None
+        self._retro_failed = False
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -125,8 +142,51 @@ class CameraUdpSender(object):
                     return None
         return dest
 
+    def _get_fx(self):
+        """레트로 효과 객체 (지연 초기화). 준비 실패 시 None → 원본 그대로 전송."""
+        if not self.retro or self._retro_failed:
+            return None
+        if self.fx is None:
+            try:
+                from retro_effect import RetroEffect   # 같은 scripts/ 디렉토리
+                self.fx = RetroEffect(**self.retro_params)
+                rospy.loginfo(
+                    '레트로 효과 ON: ghost=%.2f scanline=%.2f upscale=%.1fx '
+                    '(끄기: ~retro:=false, 대역폭 절약: ~retro_upscale:=1.0)',
+                    self.retro_params['ghost'], self.retro_params['scanline'],
+                    self.retro_params['upscale'])
+            except Exception as e:
+                self._retro_failed = True
+                rospy.logwarn('레트로 효과 비활성(%s) — 원본 그대로 전송', e)
+        return self.fx
+
+    def _apply_retro_jpeg(self, jpeg):
+        """JPEG → 디코드 → 레트로 효과 → 재인코드. 실패 시 None (원본 전송)."""
+        try:
+            import cv2
+            import numpy as np
+            bgr = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+            if bgr is None:
+                return None
+            t0 = time.monotonic()
+            out = self.fx.apply(bgr)
+            ok, buf = cv2.imencode(
+                '.jpg', out, [int(cv2.IMWRITE_JPEG_QUALITY), int(self.jpeg_quality)])
+            if not ok:
+                return None
+            # Pi 실측 확인용: 이 로그의 ms 합이 1000/max_fps(기본 66ms)를 넘으면
+            # fps 가 떨어진다 → retro_upscale:=1.0 또는 max_fps 하향으로 대응
+            rospy.loginfo_throttle(
+                10, '레트로: 효과 %.0fms / 디코드+인코드 포함 %.0fms, %dx%d → %dKB',
+                self.fx.ms, (time.monotonic() - t0) * 1000.0,
+                out.shape[1], out.shape[0], len(buf) // 1024)
+            return buf.tobytes()
+        except Exception as e:
+            rospy.logwarn_throttle(10, '레트로 효과 오류 → 원본 전송: %s', e)
+            return None
+
     def raw_cb(self, msg):
-        """원본(sensor_msgs/Image) → JPEG 직접 인코딩 후 전송."""
+        """원본(sensor_msgs/Image) → (레트로 효과) → JPEG 인코딩 후 전송."""
         dest = self._dest_if_ready()
         if dest is None:
             return
@@ -136,6 +196,9 @@ class CameraUdpSender(object):
             if self.bridge is None:
                 self.bridge = CvBridge()
             img = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+            fx = self._get_fx()
+            if fx is not None:
+                img = fx.apply(img)
             ok, buf = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), int(self.jpeg_quality)])
             if ok:
                 self._send_jpeg(buf.tobytes(), dest)
@@ -146,7 +209,10 @@ class CameraUdpSender(object):
         dest = self._dest_if_ready()
         if dest is None:
             return
-        self._send_jpeg(bytes(msg.data), dest)
+        jpeg = bytes(msg.data)
+        if self._get_fx() is not None:
+            jpeg = self._apply_retro_jpeg(jpeg) or jpeg
+        self._send_jpeg(jpeg, dest)
 
     def _send_jpeg(self, jpeg, dest):
         total = len(jpeg)

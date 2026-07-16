@@ -21,7 +21,13 @@ Quest 앱과 **완전히 동일한 UDP 프로토콜**로 동작하므로,
   마우스 드래그(조이스틱 원) 또는 W/A/S/D·방향키 = 이동
   SPACE = 긴급정지(ESTOP)   R = 해제(RESUME)
   P = 송신 일시정지(통신 끊김 시뮬레이션 — 로봇이 1초 내 자동 정지해야 정상)
+  U = 카메라 AI 업스케일 x2 토글 (FSRCNN — 선택 기능, 아래 참고)
   ESC = 종료 (종료 시 정지 패킷 전송)
+
+AI 업스케일 (선택, 노트북 쪽에서만 동작 — 로봇 부하/대역폭 영향 없음):
+  pip3 install opencv-contrib-python     # dnn_superres 포함판이어야 함
+  모델(FSRCNN_x2.pb, 40KB)은 첫 토글 때 자동 다운로드(tools/models/).
+  로봇 핫스팟 접속 중엔 인터넷이 없으므로 미리 한 번 받아둘 것.
 
 로봇 쪽 사전 조건: ROS2 는 vr_control.launch.py, ROS1(Noetic)은
 noetic_fallback 의 vr_control.launch 가 떠 있으면 된다. (+ 카메라 노드)
@@ -33,6 +39,7 @@ noetic_fallback 의 vr_control.launch 가 떠 있으면 된다. (+ 카메라 노
 import argparse
 import io
 import math
+import os
 import socket
 import struct
 import sys
@@ -143,6 +150,84 @@ def selftest():
     print('selftest OK (청크 재조립 / 상태 파싱 / 명령 미리보기)')
 
 
+class SuperRes(object):
+    """카메라 프레임 x2 AI 업스케일 (FSRCNN, OpenCV dnn_superres).
+
+    왜 노트북에서 하나: 로봇(Pi4)은 SLAM+카메라로 CPU 여유가 없고, 로봇에서
+    키우면 JPEG 가 커져 Wi-Fi 대역폭만 늘어난다. "작게 보내고 화면에서 키운다".
+
+    선택 기능 — opencv-contrib-python + 모델 파일이 있을 때만 켜진다.
+    준비가 안 되면 reason 에 안내문을 담고 꺼진 채로 남는다 (원본 그대로 표시).
+    """
+    MODEL_FILE = 'FSRCNN_x2.pb'   # ~40KB, 공식 배포처 (OpenCV dnn_superres 표준 모델)
+    MODEL_URL = ('https://github.com/Saafke/FSRCNN_Tensorflow/'
+                 'raw/master/models/FSRCNN_x2.pb')
+
+    def __init__(self):
+        self.sr = None        # cv2 DnnSuperResImpl (준비 완료 시)
+        self.cv2 = None
+        self.np = None
+        self.reason = ''      # 비활성 사유 (UI 에 표시)
+        self.ms = 0.0         # 마지막 프레임 처리 시간 (UI 에 표시)
+
+    def model_path(self):
+        return os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 'models', self.MODEL_FILE)
+
+    def try_init(self):
+        """cv2 확인 + 모델 준비(없으면 다운로드 시도). 성공 시 True."""
+        if self.sr is not None:
+            return True
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
+            self.reason = 'pip3 install opencv-contrib-python'
+            return False
+        if not hasattr(cv2, 'dnn_superres'):
+            self.reason = 'contrib 판 필요: pip3 install opencv-contrib-python'
+            return False
+        path = self.model_path()
+        if not os.path.exists(path):
+            # 첫 사용 시 자동 다운로드. 로봇 핫스팟 접속 중엔 인터넷이 없어
+            # 실패한다 → 안내문을 남기고 다음에(인터넷 될 때) 다시 시도.
+            try:
+                import urllib.request
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                urllib.request.urlretrieve(self.MODEL_URL, path + '.part')
+                os.replace(path + '.part', path)
+            except Exception:
+                self.reason = '모델 다운로드 실패 — 인터넷 연결 후 U 재시도'
+                return False
+        try:
+            sr = cv2.dnn_superres.DnnSuperResImpl_create()
+            sr.readModel(path)
+            sr.setModel('fsrcnn', 2)
+        except Exception as e:
+            self.reason = '모델 로드 실패: %s' % e
+            return False
+        self.cv2, self.np, self.sr = cv2, np, sr
+        self.reason = ''
+        return True
+
+    def process(self, jpeg):
+        """JPEG bytes → 업스케일된 (rgb_bytes, w, h). 실패 시 None (원본 표시)."""
+        if self.sr is None:
+            return None
+        try:
+            t0 = time.perf_counter()
+            arr = self.np.frombuffer(jpeg, self.np.uint8)
+            bgr = self.cv2.imdecode(arr, self.cv2.IMREAD_COLOR)
+            if bgr is None:
+                return None
+            up = self.sr.upsample(bgr)
+            rgb = self.cv2.cvtColor(up, self.cv2.COLOR_BGR2RGB)
+            self.ms = (time.perf_counter() - t0) * 1000.0
+            return rgb.tobytes(), up.shape[1], up.shape[0]
+        except Exception:
+            return None
+
+
 # ─────────────────────────────── 대시보드 본체 ───────────────────────────────
 
 class Dashboard:
@@ -162,6 +247,7 @@ class Dashboard:
 
         self.lock = threading.Lock()
         self.latest_jpeg = None
+        self.latest_sr = None        # 업스케일된 최신 프레임 (rgb_bytes, w, h)
         self.latest_map = None
         self.video_frames = 0
         self.video_fps = 0.0
@@ -170,6 +256,11 @@ class Dashboard:
         self.estop = False
         self.tx_paused = False
         self.running = True
+
+        # AI 업스케일 (U 키 토글) — 수신 스레드에서 처리해 조종 루프를 막지 않음
+        self.sr = SuperRes()
+        self.sr_enabled = False
+        self.sr_loading = False
 
         threading.Thread(target=self.video_loop, daemon=True).start()
         threading.Thread(target=self.status_loop, daemon=True).start()
@@ -196,9 +287,20 @@ class Dashboard:
                 break
             jpeg = fa.feed(pkt)
             if jpeg:
+                # SR 은 여기(수신 스레드)에서: UI/조종 루프가 안 밀린다.
+                # SR 이 프레임 간격보다 느리면 커널 소켓버퍼가 넘치며 오래된
+                # 청크가 자연 폐기되어 fps 만 떨어진다 (지연 누적 없음).
+                sr_frame = self.sr.process(jpeg) if self.sr_enabled else None
                 with self.lock:
                     self.latest_jpeg = jpeg
+                    self.latest_sr = sr_frame
                     self.video_frames += 1
+
+    def enable_sr(self):
+        """U 키: 백그라운드에서 초기화 (모델 다운로드가 UI 를 얼리지 않도록)."""
+        if self.sr.try_init():
+            self.sr_enabled = True
+        self.sr_loading = False
 
     def map_loop(self):
         """지도 이미지 수신 (영상과 같은 청크 프로토콜, 포트 5008, hello 자동 발견)."""
@@ -329,6 +431,12 @@ class Dashboard:
                         self.send_ctrl('RESUME')
                     elif ev.key == pygame.K_p:
                         self.tx_paused = not self.tx_paused
+                    elif ev.key == pygame.K_u:
+                        if self.sr_enabled:
+                            self.sr_enabled = False
+                        elif not self.sr_loading:
+                            self.sr_loading = True
+                            threading.Thread(target=self.enable_sr, daemon=True).start()
                 elif ev.type == pygame.MOUSEBUTTONDOWN:
                     dx = ev.pos[0] - joy_center[0]
                     dy = ev.pos[1] - joy_center[1]
@@ -376,21 +484,33 @@ class Dashboard:
             # 카메라 영상(위) + 라이다 지도(아래) — 둘 다 항상 화면에 표시
             with self.lock:
                 jpeg_cam = self.latest_jpeg
+                sr_cam = self.latest_sr if self.sr_enabled else None
                 jpeg_map = self.latest_map
                 fps = self.video_fps
                 status = dict(self.status)
                 status_age = time.monotonic() - self.last_status_time if self.last_status_time else 1e9
 
-            def draw_panel(rect, jpeg, label, label_col, smooth, wait_msg):
-                if jpeg:
+            def make_surface(jpeg, sr_frame=None):
+                """SR 결과가 있으면 그걸, 아니면 JPEG 디코드. 실패 시 None."""
+                try:
+                    if sr_frame:
+                        rgb, w, h = sr_frame
+                        return pygame.image.frombuffer(rgb, (w, h), 'RGB')
+                    if jpeg:
+                        return pygame.image.load(io.BytesIO(jpeg))
+                except Exception:
+                    pass
+                return None
+
+            def draw_panel(rect, surf, label, label_col, smooth, wait_msg):
+                if surf:
                     try:
-                        img = pygame.image.load(io.BytesIO(jpeg))
-                        iw, ih = img.get_size()
+                        iw, ih = surf.get_size()
                         # 종횡비 보존(레터박스): 카메라는 안 찌그러지고 정사각 지도도 형태 유지
                         s = min(rect.w / iw, rect.h / ih)
                         tw, th = max(1, int(iw * s)), max(1, int(ih * s))
                         scaler = pygame.transform.smoothscale if smooth else pygame.transform.scale
-                        img = scaler(img, (tw, th))   # 지도는 nearest 로 격자를 또렷하게
+                        img = scaler(surf, (tw, th))   # 지도는 nearest 로 격자를 또렷하게
                         screen.blit(img, (rect.x + (rect.w - tw) // 2,
                                           rect.y + (rect.h - th) // 2))
                     except Exception:
@@ -402,10 +522,11 @@ class Dashboard:
                 pygame.draw.rect(screen, (70, 74, 84), rect, 2)
                 screen.blit(font.render(label, True, label_col), (rect.x + 8, rect.y + 6))
 
-            draw_panel(cam_rect, jpeg_cam, 'CAMERA  :5006', (150, 150, 150),
-                       True, 'NO VIDEO (:5006)')
-            draw_panel(map_rect, jpeg_map, 'LiDAR MAP  :5008', (240, 210, 90),
-                       False, 'NO MAP (use_mapping:=true)')
+            cam_label = 'CAMERA  :5006' + ('  [SR x2]' if sr_cam else '')
+            draw_panel(cam_rect, make_surface(jpeg_cam, sr_cam), cam_label,
+                       (150, 150, 150), True, 'NO VIDEO (:5006)')
+            draw_panel(map_rect, make_surface(jpeg_map), 'LiDAR MAP  :5008',
+                       (240, 210, 90), False, 'NO MAP (use_mapping:=true)')
 
             # 가상 조이스틱
             pygame.draw.circle(screen, (46, 50, 58), joy_center, joy_radius)
@@ -432,8 +553,16 @@ class Dashboard:
                  (240, 180, 60) if self.tx_paused else (210, 210, 210))
             line(4, 'ANGLE : X=%+5.1f Z=%+5.1f' % (x_angle, z_angle))
             line(5, 'CMD   : vx=%+5.1f yaw=%+5.2f' % (vx, vyaw), (120, 190, 255))
-            line(7, 'SPACE=ESTOP  R=resume', (150, 150, 150))
-            line(8, 'P=pauseTX  ESC=quit', (150, 150, 150))
+            if self.sr_loading:
+                line(6, 'SR    : loading...', (240, 180, 60))
+            elif self.sr_enabled:
+                line(6, 'SR    : ON x2 (%.0fms)' % self.sr.ms, (90, 220, 120))
+            elif self.sr.reason:
+                line(6, 'SR    : %s' % self.sr.reason, (230, 80, 80))
+            else:
+                line(6, 'SR    : OFF (U)', (150, 150, 150))
+            line(8, 'SPACE=ESTOP  R=resume', (150, 150, 150))
+            line(9, 'P=pauseTX U=SR ESC=quit', (150, 150, 150))
 
             if self.estop:
                 screen.blit(big.render('E-STOP (R)', True, (255, 70, 70)), (rx, banner_y))
