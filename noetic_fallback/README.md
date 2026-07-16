@@ -82,6 +82,9 @@ roslaunch puppy_vr_control_noetic vr_control.launch use_camera:=false debug:=tru
 자율 미로 탐색은 VR 노드와 동시에 실행하지 않는다. 상세 사용법과 안전 절차는
 [`puppy_vr_control_noetic/README_MAZE.md`](./puppy_vr_control_noetic/README_MAZE.md)를 참고한다.
 
+로봇에서 지도작성 근거 데이터를 자동 수집하고 Mac으로 가져오는 절차는
+[`puppy_vr_control_noetic/README_MAPPING_VALIDATION.md`](./puppy_vr_control_noetic/README_MAPPING_VALIDATION.md)를 참고한다.
+
 ## 테스트 (ROS1 이므로 rostopic 사용)
 
 ```bash
