@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+
+# Robot-side runtime evidence. Keep large ROS bags and fetched runs out of Git.
+*.bag
+*.bag.active
+robot_runs/
+

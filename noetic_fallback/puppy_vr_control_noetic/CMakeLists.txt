@@ -23,6 +23,7 @@ catkin_install_python(PROGRAMS
   scripts/camera_udp_sender.py
   scripts/robot_status_sender.py
   scripts/lidar_mapping.py
+  scripts/mapping_run_recorder.py
   scripts/retro_effect.py
   scripts/maze_autonomy.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
