@@ -1,0 +1,41 @@
+<launch>
+  <arg name="cmd_vel_topic" default="/cmd_vel"/>
+  <arg name="puppy_velocity_topic"
+       default="/puppy_control/velocity/autogait"/>
+  <arg name="emergency_stop_topic" default="/emergency_stop"/>
+  <arg name="max_forward_speed_cm_s" default="10.0"/>
+  <arg name="max_reverse_speed_cm_s" default="10.0"/>
+  <arg name="max_yaw_rate_rad_s" default="0.28"/>
+  <arg name="watchdog_timeout_s" default="0.5"/>
+
+  <node pkg="move_base" type="move_base" name="move_base" output="screen">
+    <rosparam command="load" file="$(find ros1_maze_escape)/config/move_base.yaml"/>
+    <rosparam command="load" file="$(find ros1_maze_escape)/config/dwa_local_planner.yaml"/>
+    <rosparam command="load"
+              file="$(find ros1_maze_escape)/config/costmap_common.yaml"
+              ns="global_costmap"/>
+    <rosparam command="load"
+              file="$(find ros1_maze_escape)/config/costmap_common.yaml"
+              ns="local_costmap"/>
+    <rosparam command="load"
+              file="$(find ros1_maze_escape)/config/global_costmap.yaml"/>
+    <rosparam command="load"
+              file="$(find ros1_maze_escape)/config/local_costmap.yaml"/>
+    <remap from="cmd_vel" to="$(arg cmd_vel_topic)"/>
+  </node>
+
+  <node pkg="ros1_maze_escape"
+        type="cmd_vel_adapter_node"
+        name="cmd_vel_adapter"
+        output="screen"
+        required="true">
+    <param name="input_topic" value="$(arg cmd_vel_topic)"/>
+    <param name="output_topic" value="$(arg puppy_velocity_topic)"/>
+    <param name="emergency_stop_topic" value="$(arg emergency_stop_topic)"/>
+    <param name="max_forward_speed_cm_s" value="$(arg max_forward_speed_cm_s)"/>
+    <param name="max_reverse_speed_cm_s" value="$(arg max_reverse_speed_cm_s)"/>
+    <param name="max_yaw_rate_rad_s" value="$(arg max_yaw_rate_rad_s)"/>
+    <param name="watchdog_timeout_s" value="$(arg watchdog_timeout_s)"/>
+  </node>
+</launch>
+

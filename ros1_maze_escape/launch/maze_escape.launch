@@ -1,0 +1,40 @@
+<launch>
+  <!-- mode must be exactly "custom" or "baseline". Both cannot start together. -->
+  <arg name="mode" default="custom"/>
+  <arg name="use_rf2o" default="true"/>
+  <arg name="publish_lidar_tf" default="false"/>
+  <arg name="lidar_x" default="MEASURE_REQUIRED"/>
+  <arg name="lidar_y" default="MEASURE_REQUIRED"/>
+  <arg name="lidar_z" default="MEASURE_REQUIRED"/>
+  <arg name="lidar_yaw" default="MEASURE_REQUIRED"/>
+  <arg name="lidar_pitch" default="MEASURE_REQUIRED"/>
+  <arg name="lidar_roll" default="MEASURE_REQUIRED"/>
+
+  <include file="$(find ros1_maze_escape)/launch/mapping.launch">
+    <arg name="use_rf2o" value="$(arg use_rf2o)"/>
+    <arg name="publish_lidar_tf" value="$(arg publish_lidar_tf)"/>
+    <arg name="lidar_x" value="$(arg lidar_x)"/>
+    <arg name="lidar_y" value="$(arg lidar_y)"/>
+    <arg name="lidar_z" value="$(arg lidar_z)"/>
+    <arg name="lidar_yaw" value="$(arg lidar_yaw)"/>
+    <arg name="lidar_pitch" value="$(arg lidar_pitch)"/>
+    <arg name="lidar_roll" value="$(arg lidar_roll)"/>
+  </include>
+
+  <include file="$(find ros1_maze_escape)/launch/navigation.launch"/>
+
+  <group if="$(eval arg('mode') == 'custom')">
+    <node pkg="ros1_maze_escape"
+          type="maze_brain_node"
+          name="maze_brain"
+          output="screen"
+          required="true">
+      <rosparam command="load"
+                file="$(find ros1_maze_escape)/config/maze_brain.yaml"/>
+    </node>
+  </group>
+
+  <group if="$(eval arg('mode') == 'baseline')">
+    <include file="$(find ros1_maze_escape)/launch/explore_baseline.launch"/>
+  </group>
+</launch>

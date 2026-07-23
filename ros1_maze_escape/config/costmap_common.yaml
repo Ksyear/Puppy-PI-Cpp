@@ -1,0 +1,33 @@
+# MEASURE_REQUIRED: this rectangle is a SAMPLE ONLY, not a measured PuppyPi footprint.
+# Replace it with the maximum occupied leg envelope in base_footprint coordinates.
+footprint:
+  - [-0.18, -0.13]
+  - [-0.18, 0.13]
+  - [0.18, 0.13]
+  - [0.18, -0.13]
+footprint_padding: 0.02
+
+transform_tolerance: 0.30
+update_frequency: 5.0
+publish_frequency: 2.0
+
+obstacle_layer:
+  enabled: true
+  obstacle_range: 2.5
+  raytrace_range: 3.0
+  track_unknown_space: true
+  combination_method: 1
+  observation_sources: lidar
+  lidar:
+    topic: /scan
+    data_type: LaserScan
+    sensor_frame: lidar_frame
+    marking: true
+    clearing: true
+    inf_is_valid: false
+
+inflation_layer:
+  enabled: true
+  inflation_radius: 0.30
+  cost_scaling_factor: 5.0
+

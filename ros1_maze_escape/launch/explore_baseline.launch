@@ -1,0 +1,15 @@
+<launch>
+  <!-- Launch this only as the baseline goal source; never with maze_brain_node. -->
+  <arg name="robot_base_frame" default="base_footprint"/>
+  <arg name="costmap_topic" default="map"/>
+  <arg name="costmap_updates_topic" default="map_updates"/>
+
+  <node pkg="explore_lite" type="explore" name="explore" output="screen">
+    <rosparam command="load"
+              file="$(find ros1_maze_escape)/config/explore_lite.yaml"/>
+    <param name="robot_base_frame" value="$(arg robot_base_frame)"/>
+    <param name="costmap_topic" value="$(arg costmap_topic)"/>
+    <param name="costmap_updates_topic" value="$(arg costmap_updates_topic)"/>
+  </node>
+</launch>
+

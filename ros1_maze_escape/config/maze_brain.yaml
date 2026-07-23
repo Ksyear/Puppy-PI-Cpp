@@ -1,0 +1,31 @@
+map_topic: /map
+emergency_stop_topic: /emergency_stop
+make_plan_service: /move_base/make_plan
+move_base_action: /move_base
+map_frame: map
+robot_base_frame: base_footprint
+
+state_update_rate_hz: 2.0
+make_plan_tolerance_m: 0.10
+navigation_goal_timeout_s: 120.0
+min_frontier_size_m: 0.30
+clearance_search_radius_m: 0.60
+blacklist_radius_m: 0.35
+failure_blacklist_threshold: 2
+max_candidates_per_cycle: 30
+no_frontier_cycles_required: 3
+
+# No ONNX implementation is compiled in this initial scaffold.
+# When true, the node still reports the missing backend and uses the heuristic.
+use_ai_scorer: false
+ai_timeout_ms: 50
+
+weights:
+  information_gain: 2.0
+  actual_path_length: -1.5
+  clearance: 1.5
+  heading_change: -0.4
+  visit_count: -3.0
+  failure_count: -5.0
+  exit_probability: 3.0
+
