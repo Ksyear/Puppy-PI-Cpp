@@ -55,6 +55,36 @@ add_executable(maze_brain_node src/maze_brain_node.cpp)
 add_dependencies(maze_brain_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(maze_brain_node frontier_core ${catkin_LIBRARIES})
 
+if(CATKIN_ENABLE_TESTING)
+  find_package(rostest REQUIRED)
+
+  catkin_add_gtest(velocity_adapter_test test/velocity_adapter_test.cpp)
+  if(TARGET velocity_adapter_test)
+    add_dependencies(velocity_adapter_test ${catkin_EXPORTED_TARGETS})
+    target_link_libraries(velocity_adapter_test ${catkin_LIBRARIES})
+  endif()
+
+  catkin_add_gtest(frontier_scorer_test test/frontier_scorer_test.cpp)
+  if(TARGET frontier_scorer_test)
+    add_dependencies(frontier_scorer_test ${catkin_EXPORTED_TARGETS})
+    target_link_libraries(
+      frontier_scorer_test
+      frontier_core
+      ${catkin_LIBRARIES}
+    )
+  endif()
+
+  catkin_add_gtest(frontier_detector_test test/frontier_detector_test.cpp)
+  if(TARGET frontier_detector_test)
+    add_dependencies(frontier_detector_test ${catkin_EXPORTED_TARGETS})
+    target_link_libraries(
+      frontier_detector_test
+      frontier_core
+      ${catkin_LIBRARIES}
+    )
+  endif()
+endif()
+
 install(TARGETS frontier_core cmd_vel_adapter_node maze_brain_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
@@ -72,4 +102,3 @@ install(DIRECTORY config launch
 install(FILES README.md
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
-

@@ -132,8 +132,8 @@ score =
 
 `launch/maze_escape.launch`의 `mode`는 `custom` 또는 `baseline`이어야 합니다.
 각 모드는 서로 다른 조건부 group에 있어 `maze_brain_node`와 `explore_lite`가
-동시에 시작되지 않습니다. 다른 문자열을 주면 둘 다 시작되지 않으므로 실행
-전에 값을 확인해야 합니다.
+동시에 시작되지 않습니다. 다른 문자열을 주면 launch substitution 검증이
+실패하여 노드가 시작되지 않습니다.
 
 ```bash
 roslaunch ros1_maze_escape maze_escape.launch mode:=baseline
@@ -165,6 +165,50 @@ roslaunch ros1_maze_escape maze_escape.launch mode:=custom
 
 현재 `use_ai_scorer:=true`를 주어도 ONNX 백엔드가 없다는 경고 후 규칙 기반
 scorer를 사용합니다. 모델이 구현된 것처럼 동작하지 않습니다.
+
+## 노트북의 ROS Noetic Docker 검증
+
+Docker Desktop이 실행 중인 macOS 또는 Linux 호스트에서 다음 명령 하나로
+Ubuntu 20.04 + ROS Noetic catkin 빌드와 단위 테스트를 수행합니다.
+
+```bash
+cd /path/to/ros1_maze_escape
+./scripts/validate_noetic.sh
+```
+
+스크립트는 `docker/Dockerfile.noetic`으로 검증 이미지를 만들고, 네트워크가
+차단된 일회용 컨테이너의 `/tmp/noetic_validation_ws`에서 다음 작업을
+순서대로 수행합니다.
+
+1. 현재 패키지를 임시 catkin workspace로 복사합니다.
+2. 검증 전용 `puppy_control` 메시지 패키지를 임시 workspace에만 만듭니다.
+3. `catkin_make`, `catkin_make run_tests`,
+   `catkin_test_results --verbose`를 실행합니다.
+4. 모든 launch XML과 YAML을 정적으로 파싱합니다.
+5. `roslaunch --files`로 launch include와 substitution을 검사합니다.
+6. `mode:=invalid`가 반드시 roslaunch 오류를 반환하는지 확인합니다.
+
+검증 전용 `puppy_control/Velocity.msg`에는 `float32 x`, `float32 y`,
+`float32 yaw_rate`만 있습니다. 이것은 테스트 컴파일을 위한 최소 stub이며
+PuppyPi vendor 패키지를 대체하거나 그 호환성을 보증하지 않습니다. 실제
+로봇에서는 반드시 다음 결과를 다시 확인해야 합니다.
+
+```bash
+rosmsg show puppy_control/Velocity
+```
+
+검증 스크립트는 장치 파일을 mount하지 않고 `--network none`으로 컨테이너를
+실행합니다. `roslaunch --files`는 노드를 시작하지 않으므로 실제 로봇 토픽에
+접속하거나 속도 명령을 발행하지 않습니다.
+
+등록된 단위 테스트:
+
+- `velocity_adapter_test`: 단위 변환, 제한, y 차단, emergency stop,
+  NaN/Inf 정지
+- `frontier_scorer_test`: 가중치 계산, 경로·clearance·실패 영향,
+  NaN/Inf 거부
+- `frontier_detector_test`: 합성 지도 검출, 최소 크기, free 목표,
+  잘못된 data 크기, 회전된 map origin
 
 ## Raspberry Pi의 ROS Noetic 환경에 설치
 
@@ -341,7 +385,7 @@ rosrun tf view_frames
 - `TODO(MAINTAINER)`: `package.xml`의 maintainer 이름과 이메일 교체
 - `MEASURE_REQUIRED`: 실제 footprint와 LiDAR 6-DoF TF
 - 실기기에서 gmapping, RF2O, DWA 수치 튜닝
-- 단위 테스트와 rosbag 회귀 테스트 추가
+- watchdog ROS 통합 테스트와 rosbag 회귀 테스트 추가
 
 ## ROS Noetic EOL 주의
 

@@ -30,5 +30,7 @@
   <exec_depend>rf2o_laser_odometry</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
 
+  <test_depend>rostest</test_depend>
+
   <export/>
 </package>

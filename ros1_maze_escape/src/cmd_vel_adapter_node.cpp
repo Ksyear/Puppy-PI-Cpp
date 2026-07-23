@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 #include <boost/bind/bind.hpp>

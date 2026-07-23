@@ -1,6 +1,11 @@
 <launch>
-  <!-- mode must be exactly "custom" or "baseline". Both cannot start together. -->
+  <!--
+    Dictionary lookup intentionally makes roslaunch fail during parsing when
+    mode is not exactly "custom" or "baseline".
+  -->
   <arg name="mode" default="custom"/>
+  <arg name="validated_mode"
+       value="$(eval {'custom': 'custom', 'baseline': 'baseline'}[arg('mode')])"/>
   <arg name="use_rf2o" default="true"/>
   <arg name="publish_lidar_tf" default="false"/>
   <arg name="lidar_x" default="MEASURE_REQUIRED"/>
@@ -23,7 +28,7 @@
 
   <include file="$(find ros1_maze_escape)/launch/navigation.launch"/>
 
-  <group if="$(eval arg('mode') == 'custom')">
+  <group if="$(eval arg('validated_mode') == 'custom')">
     <node pkg="ros1_maze_escape"
           type="maze_brain_node"
           name="maze_brain"
@@ -34,7 +39,7 @@
     </node>
   </group>
 
-  <group if="$(eval arg('mode') == 'baseline')">
+  <group if="$(eval arg('validated_mode') == 'baseline')">
     <include file="$(find ros1_maze_escape)/launch/explore_baseline.launch"/>
   </group>
 </launch>

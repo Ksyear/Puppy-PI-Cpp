@@ -1,0 +1,21 @@
+FROM ros:noetic-ros-base-focal
+
+SHELL ["/bin/bash", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+      build-essential \
+      libxml2-utils \
+      python3-yaml \
+      ros-noetic-explore-lite \
+      ros-noetic-message-generation \
+      ros-noetic-navigation \
+      ros-noetic-rostest \
+      ros-noetic-slam-gmapping \
+      ros-noetic-tf2-geometry-msgs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /validation
+

@@ -6,10 +6,12 @@
 #include <vector>
 
 #include <actionlib/client/simple_action_client.h>
+#include <geometry_msgs/Point.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <move_base_msgs/MoveBaseAction.h>
 #include <nav_msgs/GetPlan.h>
 #include <nav_msgs/OccupancyGrid.h>
+#include <nav_msgs/Path.h>
 #include <ros/ros.h>
 #include <std_msgs/Bool.h>
 #include <tf2_ros/buffer.h>
@@ -123,4 +125,3 @@ class MazeBrain {
 };
 
 }  // namespace ros1_maze_escape
-

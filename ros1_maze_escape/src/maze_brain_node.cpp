@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <exception>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
-#include <utility>
 
 #include <actionlib/client/simple_client_goal_state.h>
 #include <geometry_msgs/TransformStamped.h>
