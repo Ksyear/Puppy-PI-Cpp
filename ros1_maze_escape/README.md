@@ -217,6 +217,27 @@ rosmsg show puppy_control/Velocity
 자체는 [ROS Wiki의 Ubuntu 설치 문서](https://wiki.ros.org/noetic/Installation/Ubuntu)를
 따릅니다.
 
+프로젝트가 `/home/pi/Puppy-PI-Cpp/ros1_maze_escape`에 있고 vendor ROS1
+workspace가 `/home/pi/puppy_pi`에 있으면 다음 한 명령으로 별도 catkin
+workspace 링크 생성, Release 빌드, 단위 테스트와 결과 검증을 수행합니다.
+기존 링크나 디렉터리가 다른 대상을 가리키면 덮어쓰지 않고 실패합니다.
+
+```bash
+cd /home/pi/Puppy-PI-Cpp/ros1_maze_escape
+./scripts/setup_and_build_puppypi.sh
+```
+
+성공하면 마지막에 `PUPPYPI_BUILD_AND_TEST_OK`가 출력됩니다. 스크립트가 끝난
+뒤 현재 터미널에서 빌드 결과를 사용하려면 다음 환경을 적용합니다.
+
+```bash
+source /home/pi/puppypi_maze_ws/devel/setup.bash
+```
+
+이 스크립트는 ROS 노드를 실행하거나 실제 속도 토픽에 발행하지 않습니다.
+또한 패키지를 복사하지 않고 현재 프로젝트 폴더를
+`/home/pi/puppypi_maze_ws/src/ros1_maze_escape`에 심볼릭 링크합니다.
+
 일반 ROS 의존성 apt 패키지:
 
 ```bash
