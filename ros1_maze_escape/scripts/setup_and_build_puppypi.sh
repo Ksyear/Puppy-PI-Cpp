@@ -57,8 +57,29 @@ echo "Catkin link:    ${PACKAGE_LINK}"
 echo "Vendor package: ${PUPPY_CONTROL_PATH}"
 
 cd "${CATKIN_WORKSPACE}"
-catkin_make -DCMAKE_BUILD_TYPE=Release
-catkin_make run_tests
+catkin_make \
+  -DCATKIN_ENABLE_TESTING=ON \
+  -DCMAKE_BUILD_TYPE=Release
+catkin_make run_tests_ros1_maze_escape
+
+for TEST_TARGET in \
+  velocity_adapter_test \
+  frontier_scorer_test \
+  frontier_detector_test
+do
+  TEST_RESULT="${CATKIN_WORKSPACE}/build/test_results/ros1_maze_escape/gtest-${TEST_TARGET}.xml"
+  test -s "${TEST_RESULT}" ||
+    fail "Expected test result was not generated: ${TEST_RESULT}"
+
+  TEST_COUNT="$(
+    python3 -c \
+      'import sys, xml.etree.ElementTree as ET; print(ET.parse(sys.argv[1]).getroot().attrib.get("tests", "0"))' \
+      "${TEST_RESULT}"
+  )" || fail "Cannot parse test result: ${TEST_RESULT}"
+  test "${TEST_COUNT}" -gt 0 ||
+    fail "Test target ${TEST_TARGET} executed zero test cases"
+done
+
 catkin_test_results --verbose build/test_results
 
 source "${CATKIN_WORKSPACE}/devel/setup.bash"

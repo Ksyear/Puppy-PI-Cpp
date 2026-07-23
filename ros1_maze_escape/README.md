@@ -229,6 +229,8 @@ cd /home/pi/Puppy-PI-Cpp/ros1_maze_escape
 
 성공하면 마지막에 `PUPPYPI_BUILD_AND_TEST_OK`가 출력됩니다. 스크립트가 끝난
 뒤 현재 터미널에서 빌드 결과를 사용하려면 다음 환경을 적용합니다.
+세 gtest 결과 파일이 생성되고 각 파일에 한 개 이상의 테스트가 기록되지
+않으면 스크립트는 성공 메시지를 출력하지 않고 종료 코드 1로 실패합니다.
 
 ```bash
 source /home/pi/puppypi_maze_ws/devel/setup.bash
