@@ -8,6 +8,7 @@ CATKIN_WORKSPACE="/home/pi/puppypi_maze_ws"
 VENDOR_SETUP="/home/pi/puppy_pi/devel/setup.bash"
 NOETIC_SETUP="/opt/ros/noetic/setup.bash"
 PACKAGE_LINK="${CATKIN_WORKSPACE}/src/ros1_maze_escape"
+LINK_FARM_MARKER="${PACKAGE_LINK}/.ros1_maze_escape_source"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -46,14 +47,51 @@ if test -L "${PACKAGE_LINK}"; then
   LINK_TARGET="$(readlink -f "${PACKAGE_LINK}")"
   test "${LINK_TARGET}" = "${PACKAGE_DIR}" ||
     fail "${PACKAGE_LINK} already points to ${LINK_TARGET}; refusing to replace it"
+  unlink "${PACKAGE_LINK}"
+  mkdir "${PACKAGE_LINK}"
 elif test -e "${PACKAGE_LINK}"; then
-  fail "${PACKAGE_LINK} already exists and is not a symbolic link"
+  test -d "${PACKAGE_LINK}" ||
+    fail "${PACKAGE_LINK} exists and is not a directory"
+  test -f "${LINK_FARM_MARKER}" ||
+    fail "${PACKAGE_LINK} exists but was not created by this script"
+  test "$(cat "${LINK_FARM_MARKER}")" = "${PACKAGE_DIR}" ||
+    fail "${PACKAGE_LINK} belongs to a different package source"
 else
-  ln -s "${PACKAGE_DIR}" "${PACKAGE_LINK}"
+  mkdir "${PACKAGE_LINK}"
 fi
 
+if ! test -f "${LINK_FARM_MARKER}"; then
+  printf '%s\n' "${PACKAGE_DIR}" >"${LINK_FARM_MARKER}"
+fi
+
+for PACKAGE_ENTRY in \
+  CMakeLists.txt \
+  package.xml \
+  README.md \
+  include \
+  src \
+  launch \
+  config \
+  test
+do
+  SOURCE_ENTRY="${PACKAGE_DIR}/${PACKAGE_ENTRY}"
+  LINK_ENTRY="${PACKAGE_LINK}/${PACKAGE_ENTRY}"
+
+  test -e "${SOURCE_ENTRY}" ||
+    fail "Required package entry is missing: ${SOURCE_ENTRY}"
+
+  if test -L "${LINK_ENTRY}"; then
+    test "$(readlink -f "${LINK_ENTRY}")" = "$(readlink -f "${SOURCE_ENTRY}")" ||
+      fail "${LINK_ENTRY} points to an unexpected target"
+  elif test -e "${LINK_ENTRY}"; then
+    fail "${LINK_ENTRY} exists and is not a symbolic link"
+  else
+    ln -s "${SOURCE_ENTRY}" "${LINK_ENTRY}"
+  fi
+done
+
 echo "Package source: ${PACKAGE_DIR}"
-echo "Catkin link:    ${PACKAGE_LINK}"
+echo "Catkin package: ${PACKAGE_LINK}"
 echo "Vendor package: ${PUPPY_CONTROL_PATH}"
 
 cd "${CATKIN_WORKSPACE}"

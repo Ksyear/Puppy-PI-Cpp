@@ -237,8 +237,11 @@ source /home/pi/puppypi_maze_ws/devel/setup.bash
 ```
 
 이 스크립트는 ROS 노드를 실행하거나 실제 속도 토픽에 발행하지 않습니다.
-또한 패키지를 복사하지 않고 현재 프로젝트 폴더를
-`/home/pi/puppypi_maze_ws/src/ros1_maze_escape`에 심볼릭 링크합니다.
+또한 패키지를 복사하지 않습니다. catkin workspace에는 실제 디렉터리를 만든
+뒤 빌드에 필요한 파일과 하위 디렉터리만 현재 프로젝트로 심볼릭 링크합니다.
+원본의 `COLCON_IGNORE`는 링크하지 않습니다. `catkin_pkg`도 이 파일을 ignore
+marker로 처리하므로 프로젝트 폴더 전체를 직접 링크하면 catkin이 패키지를
+발견하지 못하기 때문입니다.
 
 일반 ROS 의존성 apt 패키지:
 
@@ -273,6 +276,7 @@ LD19 드라이버 패키지는 보드·펌웨어·연결 방식에 따라 달라
 source /opt/ros/noetic/setup.bash
 mkdir -p ~/puppypi_maze_ws/src
 cp -R /path/to/ros1_maze_escape ~/puppypi_maze_ws/src/
+rm ~/puppypi_maze_ws/src/ros1_maze_escape/COLCON_IGNORE
 
 # RF2O가 필요한 경우에만:
 git clone --branch ros1 https://github.com/MAPIRlab/rf2o_laser_odometry.git \

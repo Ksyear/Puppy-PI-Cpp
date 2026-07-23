@@ -42,6 +42,9 @@ export ROS_IP=127.0.0.1
 WORKSPACE=/tmp/noetic_validation_ws
 mkdir -p "${WORKSPACE}/src"
 cp -a /package_src "${WORKSPACE}/src/ros1_maze_escape"
+# catkin_pkg treats COLCON_IGNORE as an ignore marker too. Remove it only from
+# this disposable copy so the real package keeps its required colcon marker.
+rm -f "${WORKSPACE}/src/ros1_maze_escape/COLCON_IGNORE"
 
 # Validation-only message package. It exists only in this disposable container
 # workspace and is not a replacement for the PuppyPi vendor package.
