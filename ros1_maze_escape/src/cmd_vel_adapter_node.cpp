@@ -1,11 +1,11 @@
 #include <algorithm>
 #include <cmath>
+#include <csignal>
 #include <exception>
 #include <memory>
 #include <stdexcept>
 #include <string>
 
-#include <boost/bind/bind.hpp>
 #include <geometry_msgs/Twist.h>
 #include <puppy_control/Velocity.h>
 #include <ros/ros.h>
@@ -46,8 +46,6 @@ class CmdVelAdapterNode {
     const double timer_period_s = std::min(0.05, watchdog_timeout_s_ / 2.0);
     watchdog_timer_ = nh_.createTimer(
         ros::Duration(timer_period_s), &CmdVelAdapterNode::watchdogCallback, this);
-    ros::on_shutdown(
-        boost::bind(&CmdVelAdapterNode::publishShutdownStops, this));
 
     last_cmd_time_ = ros::SteadyTime::now();
     publishStop("startup");
@@ -58,6 +56,23 @@ class CmdVelAdapterNode {
                     << " reverse_limit=" << limits_.max_reverse_cm_s << " cm/s"
                     << " yaw_limit=" << limits_.max_yaw_rate_rad_s << " rad/s"
                     << " watchdog=" << watchdog_timeout_s_ << " s");
+  }
+
+  ~CmdVelAdapterNode() {
+    publishShutdownStops();
+  }
+
+  void publishShutdownStops() {
+    if (shutdown_stops_published_) {
+      return;
+    }
+    shutdown_stops_published_ = true;
+    const puppy_control::Velocity stop = VelocityAdapter::stopCommand();
+    for (int count = 0; count < 3; ++count) {
+      velocity_pub_.publish(stop);
+      ros::WallDuration(0.02).sleep();
+    }
+    ROS_INFO("[PUPPY_COMMAND] published 3 shutdown stop commands");
   }
 
  private:
@@ -131,19 +146,6 @@ class CmdVelAdapterNode {
     ROS_DEBUG_STREAM("[PUPPY_COMMAND] stop reason=" << reason);
   }
 
-  void publishShutdownStops() {
-    if (shutdown_stops_published_) {
-      return;
-    }
-    shutdown_stops_published_ = true;
-    const puppy_control::Velocity stop = VelocityAdapter::stopCommand();
-    for (int count = 0; count < 3; ++count) {
-      velocity_pub_.publish(stop);
-      ros::WallDuration(0.02).sleep();
-    }
-    ROS_INFO("[PUPPY_COMMAND] published 3 shutdown stop commands");
-  }
-
   ros::NodeHandle nh_;
   ros::NodeHandle private_nh_;
   ros::Publisher velocity_pub_;
@@ -162,11 +164,34 @@ class CmdVelAdapterNode {
 
 }  // namespace ros1_maze_escape
 
+namespace {
+
+volatile std::sig_atomic_t shutdown_requested = 0;
+
+void shutdownSignalHandler(int) {
+  shutdown_requested = 1;
+}
+
+}  // namespace
+
 int main(int argc, char** argv) {
-  ros::init(argc, argv, "cmd_vel_adapter");
+  ros::init(
+      argc, argv, "cmd_vel_adapter", ros::init_options::NoSigintHandler);
+  if (std::signal(SIGINT, shutdownSignalHandler) == SIG_ERR ||
+      std::signal(SIGTERM, shutdownSignalHandler) == SIG_ERR) {
+    ROS_FATAL("Failed to install shutdown signal handlers");
+    return 1;
+  }
+
   try {
     ros1_maze_escape::CmdVelAdapterNode node;
-    ros::spin();
+    ros::WallRate loop_rate(100.0);
+    while (ros::ok() && shutdown_requested == 0) {
+      ros::spinOnce();
+      loop_rate.sleep();
+    }
+    node.publishShutdownStops();
+    ros::shutdown();
   } catch (const std::exception& error) {
     ROS_FATAL_STREAM("cmd_vel_adapter initialization failed: " << error.what());
     return 1;

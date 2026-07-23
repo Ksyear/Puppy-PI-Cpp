@@ -78,7 +78,9 @@ output.yaw_rate = clamp(input.angular.z, -yaw_limit, yaw_limit)
 기본 제한은 전진 10 cm/s, 후진 10 cm/s, 회전 0.28 rad/s입니다. 모든
 `Twist` 성분을 검사하여 NaN 또는 Inf가 하나라도 있으면 즉시 정지합니다.
 `/cmd_vel` 수신이 0.5초 끊겨도 정지하고, 시작할 때 정지 명령을 먼저 내리며,
-종료 콜백에서는 정지를 3회 발행합니다. `/emergency_stop`
+SIGINT 또는 SIGTERM 종료 경로에서는 ROS 통신을 종료하기 전에 정지를 3회
+발행합니다. 객체 소멸자도 같은 함수를 호출하되 중복 발행은 차단합니다.
+`/emergency_stop`
 (`std_msgs/Bool`)이 `true`이면 모든 출력을 0으로 만들고, 해제 뒤에는 오래된
 명령을 재사용하지 않고 새 `/cmd_vel`을 기다립니다. ROS debug 로그의
 `[RAW_TWIST]`와 `[PUPPY_COMMAND]`로 입력과 출력을 구분합니다.

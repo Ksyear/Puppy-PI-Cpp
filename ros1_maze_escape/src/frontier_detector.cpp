@@ -193,6 +193,7 @@ std::vector<FrontierCandidate> FrontierDetector::detect(
                  std::ceil(config_.clearance_search_radius_m /
                            map.info.resolution)));
       double nearest_obstacle = config_.clearance_search_radius_m;
+      const double resolution = static_cast<double>(map.info.resolution);
       for (int offset_y = -search_cells; offset_y <= search_cells; ++offset_y) {
         for (int offset_x = -search_cells; offset_x <= search_cells; ++offset_x) {
           const int x = goal_cell->x + offset_x;
@@ -203,8 +204,8 @@ std::vector<FrontierCandidate> FrontierDetector::detect(
           }
           nearest_obstacle = std::min(
               nearest_obstacle,
-              std::hypot(offset_x * map.info.resolution,
-                         offset_y * map.info.resolution));
+              std::hypot(static_cast<double>(offset_x) * resolution,
+                         static_cast<double>(offset_y) * resolution));
         }
       }
       candidate.features.clearance = nearest_obstacle;
