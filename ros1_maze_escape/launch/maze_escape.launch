@@ -7,6 +7,12 @@
   <arg name="validated_mode"
        value="$(eval {'custom': 'custom', 'baseline': 'baseline'}[arg('mode')])"/>
   <arg name="use_rf2o" default="true"/>
+  <arg name="scan_topic" default="/scan"/>
+  <arg name="odom_topic" default="/odom"/>
+  <arg name="map_frame" default="map"/>
+  <arg name="odom_frame" default="odom"/>
+  <arg name="base_frame" default="base_footprint"/>
+  <arg name="lidar_frame" default="lidar_frame"/>
   <arg name="publish_lidar_tf" default="false"/>
   <arg name="lidar_x" default="MEASURE_REQUIRED"/>
   <arg name="lidar_y" default="MEASURE_REQUIRED"/>
@@ -14,9 +20,23 @@
   <arg name="lidar_yaw" default="MEASURE_REQUIRED"/>
   <arg name="lidar_pitch" default="MEASURE_REQUIRED"/>
   <arg name="lidar_roll" default="MEASURE_REQUIRED"/>
+  <arg name="cmd_vel_topic" default="/cmd_vel"/>
+  <arg name="puppy_velocity_topic"
+       default="/puppy_control/velocity/autogait"/>
+  <arg name="emergency_stop_topic" default="/emergency_stop"/>
+  <arg name="max_forward_speed_cm_s" default="10.0"/>
+  <arg name="max_reverse_speed_cm_s" default="10.0"/>
+  <arg name="max_yaw_rate_rad_s" default="0.28"/>
+  <arg name="watchdog_timeout_s" default="0.5"/>
 
   <include file="$(find ros1_maze_escape)/launch/mapping.launch">
     <arg name="use_rf2o" value="$(arg use_rf2o)"/>
+    <arg name="scan_topic" value="$(arg scan_topic)"/>
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="map_frame" value="$(arg map_frame)"/>
+    <arg name="odom_frame" value="$(arg odom_frame)"/>
+    <arg name="base_frame" value="$(arg base_frame)"/>
+    <arg name="lidar_frame" value="$(arg lidar_frame)"/>
     <arg name="publish_lidar_tf" value="$(arg publish_lidar_tf)"/>
     <arg name="lidar_x" value="$(arg lidar_x)"/>
     <arg name="lidar_y" value="$(arg lidar_y)"/>
@@ -26,7 +46,18 @@
     <arg name="lidar_roll" value="$(arg lidar_roll)"/>
   </include>
 
-  <include file="$(find ros1_maze_escape)/launch/navigation.launch"/>
+  <include file="$(find ros1_maze_escape)/launch/navigation.launch">
+    <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
+    <arg name="lidar_frame" value="$(arg lidar_frame)"/>
+    <arg name="puppy_velocity_topic" value="$(arg puppy_velocity_topic)"/>
+    <arg name="emergency_stop_topic" value="$(arg emergency_stop_topic)"/>
+    <arg name="max_forward_speed_cm_s"
+         value="$(arg max_forward_speed_cm_s)"/>
+    <arg name="max_reverse_speed_cm_s"
+         value="$(arg max_reverse_speed_cm_s)"/>
+    <arg name="max_yaw_rate_rad_s" value="$(arg max_yaw_rate_rad_s)"/>
+    <arg name="watchdog_timeout_s" value="$(arg watchdog_timeout_s)"/>
+  </include>
 
   <group if="$(eval arg('validated_mode') == 'custom')">
     <node pkg="ros1_maze_escape"
@@ -36,6 +67,8 @@
           required="true">
       <rosparam command="load"
                 file="$(find ros1_maze_escape)/config/maze_brain.yaml"/>
+      <param name="emergency_stop_topic"
+             value="$(arg emergency_stop_topic)"/>
     </node>
   </group>
 

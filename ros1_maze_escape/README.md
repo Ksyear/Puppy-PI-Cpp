@@ -145,6 +145,20 @@ roslaunch ros1_maze_escape maze_escape.launch mode:=custom
 두 명령을 동시에 실행하거나 별도 터미널에서 `explore`를 추가 실행하면 목표
 충돌이 발생하므로 금지합니다.
 
+실제 `/scan/header.frame_id`가 기본값 `lidar_frame`과 다르면
+`lidar_frame` launch 인자로 실제 프레임을 전달합니다. 기존 로봇 제어기가
+`/cmd_vel`을 직접 구독하는 경우에는 move_base와 어댑터 사이의 토픽을 별도
+이름으로 분리해야 합니다. 예를 들어 실제 scan 프레임이 `laser`이면 다음
+인자를 사용합니다.
+
+```bash
+lidar_frame:=laser cmd_vel_topic:=/maze_cmd_vel
+```
+
+이 인자는 프레임 또는 속도 토픽 충돌을 자동 해결하지 않습니다. 실행 전에
+TF가 실제로 존재하는지, `/maze_cmd_vel` 구독자가 어댑터뿐인지, 최종 PuppyPi
+속도 토픽 발행자가 어댑터뿐인지 각각 확인해야 합니다.
+
 ## AI가 `/cmd_vel`을 직접 제어하지 않는 이유
 
 학습 모델의 출력은 시간 초과, NaN, 분포 밖 입력, 모델 파일 손상에 의해

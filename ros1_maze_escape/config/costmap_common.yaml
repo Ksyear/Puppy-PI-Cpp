@@ -21,6 +21,7 @@ obstacle_layer:
   lidar:
     topic: /scan
     data_type: LaserScan
+    # Default only. navigation.launch overrides this from lidar_frame.
     sensor_frame: lidar_frame
     marking: true
     clearing: true
@@ -30,4 +31,3 @@ inflation_layer:
   enabled: true
   inflation_radius: 0.30
   cost_scaling_factor: 5.0
-
