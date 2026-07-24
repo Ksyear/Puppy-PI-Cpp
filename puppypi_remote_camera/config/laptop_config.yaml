@@ -1,0 +1,28 @@
+network:
+  # 비워 두면 GUI가 시작할 때 입력받습니다. --robot-ip 인자가 이 값을 덮어씁니다.
+  robot_ip: ""
+  video_port: 5000
+  control_port: 5001
+  protocol_version: 1
+  control_send_rate_hz: 20.0
+  stop_repetitions: 5
+  connect_timeout_seconds: 3.0
+  video_frame_timeout_seconds: 1.0
+  reconnect_delay_seconds: 1.0
+  max_jpeg_bytes: 20971520
+
+movement:
+  forward_cm_s: 5.0
+  reverse_cm_s: 3.0
+  yaw_rate_rad_s: 0.20
+
+recording:
+  directory: ~/PuppyPiRecordings
+  default_fps: 30.0
+  minimum_valid_bytes: 1024
+  max_fill_gap_seconds: 2.0
+
+display:
+  # GUI 표시만 축소합니다. 녹화 프레임은 축소하지 않습니다.
+  max_width: 1024
+  max_height: 576

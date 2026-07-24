@@ -1,0 +1,32 @@
+# 실제 모터 시험 전까지 반드시 false로 유지하십시오.
+enable_motor_control: false
+
+motor_topic: /puppy_control/velocity/autogait
+test_topic: /puppypi_remote_camera/test_velocity
+
+bind_address: 0.0.0.0
+video_port: 5000
+control_port: 5001
+protocol_version: 1
+
+# 검사 스레드 scheduling 지연을 포함해 0.3초 안에 정지하도록 0.25초로 둡니다.
+command_timeout_seconds: 0.25
+client_lease_timeout_seconds: 1.0
+max_packet_age_seconds: 0.3
+max_future_seconds: 1.0
+stop_repetitions: 5
+
+velocity_limits:
+  max_forward_cm_s: 5.0
+  max_reverse_cm_s: 3.0
+  max_yaw_rate_rad_s: 0.20
+
+camera:
+  # v4l2-ctl --list-devices 또는 /dev/v4l/by-id에 나타나는 식별 문자열입니다.
+  # 일치하는 이름이 없으면 서버는 다른 카메라로 임의 대체하지 않고 종료합니다.
+  name_contains: NV50-HD220S
+  preferred_width: 1920
+  preferred_height: 1080
+  preferred_fps: 30.0
+  jpeg_quality: 85
+  frame_timeout_seconds: 1.0
