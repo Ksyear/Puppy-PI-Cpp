@@ -147,8 +147,10 @@ chmod +x start_laptop_client.sh
 
 스크립트는 첫 실행에 `laptop/.venv`를 만들고 필요한 Python 패키지를
 설치합니다. 이후에는 `requirements.txt`가 바뀐 경우에만 다시 설치합니다.
-현재 `python3`에 Tkinter가 없고 macOS의 다른 Python에 Tkinter가 있으면
-스크립트가 사용 가능한 Python을 선택합니다. 자동 선택이 맞지 않으면
+스크립트는 Tk 8.6 이상이 있는 Python을 선택합니다. Apple 시스템 Tk 8.5는
+폐기 예정이며 영상 표시 문제가 발생할 수 있어 사용하지 않습니다. Homebrew
+Python에서 Tk가 없으면 `brew install python-tk@3.14`로 설치합니다.
+자동 선택이 맞지 않으면
 `PUPPYPI_PYTHON=/경로/python3`으로 명시할 수 있습니다.
 `--robot-ip`를 생략하면 `config/laptop_config.yaml`의 `robot_ip`를
 사용하고, 그것도 비어 있으면 GUI가 IP를 묻습니다.
