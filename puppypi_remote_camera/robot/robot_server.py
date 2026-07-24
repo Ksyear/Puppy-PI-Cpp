@@ -35,6 +35,8 @@ def load_config(path: str) -> dict:
         raise ValueError("robot_config.yaml 필수 항목 누락: %s" % sorted(missing))
     if type(config["enable_motor_control"]) is not bool:
         raise ValueError("enable_motor_control은 true 또는 false여야 합니다")
+    if type(config.get("stand_on_start", True)) is not bool:
+        raise ValueError("stand_on_start는 true 또는 false여야 합니다")
     return config
 
 
@@ -86,6 +88,7 @@ class RosVelocityOutput:
 
 class RobotServer:
     def __init__(self, config: dict):
+        self._config = config
         self._shutdown_lock = threading.Lock()
         self._shut_down = False
         self._output = RosVelocityOutput(config)
@@ -103,10 +106,39 @@ class RobotServer:
     def start(self):
         self._controller.start()
         try:
+            self._stand_up_if_enabled()
             self._camera.start()
         except Exception:
             self._controller.shutdown()
             raise
+
+    def _stand_up_if_enabled(self):
+        if (
+            not self._config["enable_motor_control"]
+            or not self._config.get("stand_on_start", True)
+        ):
+            return
+
+        import rospy
+        from std_srvs.srv import Empty
+
+        service_name = str(
+            self._config.get("stand_service", "/puppy_control/go_home")
+        )
+        timeout = float(self._config.get("stand_service_timeout_seconds", 15.0))
+        if not service_name or timeout <= 0:
+            raise ValueError("서기 자세 서비스 설정이 올바르지 않습니다")
+
+        rospy.logwarn("서기 자세 서비스 대기: %s", service_name)
+        try:
+            rospy.wait_for_service(service_name, timeout=timeout)
+            rospy.ServiceProxy(service_name, Empty)()
+        except (rospy.ROSException, rospy.ServiceException) as exc:
+            raise RuntimeError(
+                "서기 자세 서비스 호출 실패; 조종 서버를 시작하지 않습니다: %s"
+                % exc
+            )
+        rospy.loginfo("서기 자세 완료: %s", service_name)
 
     def shutdown(self):
         with self._shutdown_lock:

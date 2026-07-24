@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import uuid
+from pathlib import Path
 from typing import Callable, Tuple
 
 import cv2
@@ -274,6 +275,7 @@ class VideoReceiver:
         self._status_message = "연결 대기"
         self._latest = None
         self._receive_times = collections.deque()
+        self._first_frame_logged = False
 
     @property
     def connected(self) -> bool:
@@ -299,6 +301,14 @@ class VideoReceiver:
     def snapshot(self):
         with self._lock:
             return self._latest
+
+    def has_fresh_frame(self, max_age_seconds: float = 0.5) -> bool:
+        with self._lock:
+            return (
+                self._connected
+                and self._latest is not None
+                and time.monotonic() - self._latest[6] <= max_age_seconds
+            )
 
     def shutdown(self):
         self._running.clear()
@@ -333,6 +343,7 @@ class VideoReceiver:
                     self._connected = True
                     self._status_message = "영상 연결됨"
                     self._receive_times.clear()
+                    self._first_frame_logged = False
                 self._receive_frames(current_socket)
             except (OSError, ValueError, TimeoutError) as exc:
                 self._set_disconnected(str(exc))
@@ -397,7 +408,15 @@ class VideoReceiver:
                     timestamp_ns,
                 )
                 self._status_message = "영상 연결됨"
+                log_first_frame = not self._first_frame_logged
+                self._first_frame_logged = True
             last_sequence = sequence
+            if log_first_frame:
+                print(
+                    "영상 첫 프레임 수신: %dx%d, 카메라 설정 %.2f fps"
+                    % (width, height, source_fps),
+                    flush=True,
+                )
             self._frame_handler(frame, received_at)
 
     @staticmethod
@@ -436,6 +455,7 @@ class LaptopApplication:
         self._pressed_actions = set()
         self._last_display_sequence = -1
         self._last_video_connected = False
+        self._first_display_logged = False
         self._photo = None
 
         recording = config["recording"]
@@ -649,7 +669,7 @@ class LaptopApplication:
         x, yaw, name = self._motion_values()
         enabled = (
             self._window_focused
-            and self.receiver.connected
+            and self.receiver.has_fresh_frame()
             and self.controller.control_alive
             and not self.controller.robot_emergency
         )
@@ -685,7 +705,7 @@ class LaptopApplication:
             self._finish_recording()
             return
         snapshot = self.receiver.snapshot()
-        if snapshot is None or not self.receiver.connected:
+        if snapshot is None or not self.receiver.has_fresh_frame():
             messagebox.showerror(
                 "녹화 시작 실패",
                 "현재 수신 중인 영상 프레임이 없습니다.",
@@ -776,7 +796,12 @@ class LaptopApplication:
             if time.monotonic() - received_at > 0.5:
                 self.controller.safety_stop_burst()
 
-        video_state = "영상 연결" if video_connected else self.receiver.status_message
+        if self.receiver.has_fresh_frame():
+            video_state = "영상 정상"
+        elif video_connected:
+            video_state = "TCP 연결됨 / 정상 영상 프레임 없음"
+        else:
+            video_state = self.receiver.status_message
         control_state = (
             "제어 응답 정상"
             if self.controller.control_alive
@@ -812,8 +837,18 @@ class LaptopApplication:
         else:
             display_frame = frame
         rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
-        self._photo = ImageTk.PhotoImage(Image.fromarray(rgb))
+        self._photo = ImageTk.PhotoImage(
+            Image.fromarray(rgb),
+            master=self.root,
+        )
         self.video_label.configure(image=self._photo, text="")
+        if not self._first_display_logged:
+            self._first_display_logged = True
+            print(
+                "GUI 첫 프레임 표시 완료: %dx%d -> %dx%d"
+                % (width, height, shown_width, shown_height),
+                flush=True,
+            )
 
     def shutdown(self):
         if self._closing:
@@ -840,6 +875,44 @@ def load_config(path: str) -> dict:
     return config
 
 
+def test_video_once(robot_ip: str, config: dict) -> int:
+    network = config["network"]
+    port = int(network["video_port"])
+    timeout = float(network.get("connect_timeout_seconds", 3.0))
+    max_jpeg_bytes = int(network.get("max_jpeg_bytes", 20 * 1024 * 1024))
+
+    with socket.create_connection((robot_ip, port), timeout=timeout) as sock:
+        sock.settimeout(max(5.0, timeout))
+        header = VideoReceiver._recv_exact(sock, FRAME_HEADER.size)
+        magic, size, sequence, _, width, height, fps_x100 = (
+            FRAME_HEADER.unpack(header)
+        )
+        if magic != FRAME_MAGIC:
+            raise ValueError("영상 프로토콜 magic 불일치: %r" % (magic,))
+        if not 1 <= size <= max_jpeg_bytes:
+            raise ValueError("JPEG 크기 범위 오류: %d bytes" % size)
+        jpeg = VideoReceiver._recv_exact(sock, size)
+
+    frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if frame is None or frame.size == 0:
+        raise ValueError("수신 JPEG를 디코딩할 수 없습니다")
+    decoded_height, decoded_width = frame.shape[:2]
+    if decoded_width != width or decoded_height != height:
+        raise ValueError(
+            "헤더와 JPEG 해상도 불일치: %dx%d / %dx%d"
+            % (width, height, decoded_width, decoded_height)
+        )
+
+    output = Path("/tmp/puppypi_test.jpg")
+    output.write_bytes(jpeg)
+    print("sequence=%d" % sequence)
+    print("resolution=%dx%d" % (width, height))
+    print("camera_fps=%.2f" % (fps_x100 / 100.0))
+    print("jpeg_bytes=%d" % size)
+    print("saved=%s" % output)
+    return 0
+
+
 def build_argument_parser() -> argparse.ArgumentParser:
     default_config = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "config", "laptop_config.yaml")
@@ -853,6 +926,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         default=default_config,
         help="laptop_config.yaml 경로",
     )
+    parser.add_argument(
+        "--test-video",
+        action="store_true",
+        help="GUI 없이 영상 한 프레임을 받아 /tmp/puppypi_test.jpg로 저장",
+    )
     return parser
 
 
@@ -864,8 +942,18 @@ def main() -> int:
         print("설정 오류: %s" % exc, file=sys.stderr)
         return 2
 
-    root = tk.Tk()
     robot_ip = args.robot_ip or str(config["network"].get("robot_ip", "")).strip()
+    if args.test_video:
+        if not robot_ip:
+            print("--test-video에는 --robot-ip가 필요합니다.", file=sys.stderr)
+            return 2
+        try:
+            return test_video_once(robot_ip.strip(), config)
+        except (OSError, ValueError, TimeoutError) as exc:
+            print("영상 한 프레임 시험 실패: %s" % exc, file=sys.stderr)
+            return 1
+
+    root = tk.Tk()
     if not robot_ip:
         root.withdraw()
         robot_ip = simpledialog.askstring(

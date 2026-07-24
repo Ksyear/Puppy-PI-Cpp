@@ -275,6 +275,12 @@ enable_motor_control: true
 `ENABLE MOTORS`를 입력해야 시작됩니다. 비대화형 실행은 명시적인
 `--confirm-motor-control` 인자가 없으면 거부됩니다.
 
+안전 확인이 끝나고 실제 모터 제어가 활성화된 경우에만 서버는 기본적으로
+`/puppy_control/go_home` (`std_srvs/Empty`) 서비스를 호출해 다리를 먼저
+폅니다. 서비스 호출이 실패하면 이동 명령을 받기 전에 서버 실행을 중단합니다.
+시험 모드(`enable_motor_control: false`)에서는 이 서비스를 호출하지 않으므로
+실제 서보가 움직이지 않습니다.
+
 실제 시험 직전에는 다음도 확인하십시오.
 
 ```bash

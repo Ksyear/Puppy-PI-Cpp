@@ -4,6 +4,11 @@ enable_motor_control: false
 motor_topic: /puppy_control/velocity/autogait
 test_topic: /puppypi_remote_camera/test_velocity
 
+# 실제 모터 제어가 활성화된 경우에만 시작 전에 다리를 펴는 서비스입니다.
+stand_on_start: true
+stand_service: /puppy_control/go_home
+stand_service_timeout_seconds: 15.0
+
 bind_address: 0.0.0.0
 video_port: 5000
 control_port: 5001

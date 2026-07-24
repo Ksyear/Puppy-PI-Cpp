@@ -17,6 +17,8 @@ if [[ -n "${PUPPYPI_WORKSPACE_SETUP:-}" ]]; then
   source "${PUPPYPI_WORKSPACE_SETUP}"
 elif [[ -f /home/pi/PuppyPi/devel/setup.bash ]]; then
   source /home/pi/PuppyPi/devel/setup.bash
+elif [[ -f /home/pi/puppy_pi/devel/setup.bash ]]; then
+  source /home/pi/puppy_pi/devel/setup.bash
 elif [[ -f /home/pi/Puppy-PI-Cpp/devel/setup.bash ]]; then
   source /home/pi/Puppy-PI-Cpp/devel/setup.bash
 fi
