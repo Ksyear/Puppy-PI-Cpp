@@ -34,4 +34,6 @@ camera:
   preferred_height: 1080
   preferred_fps: 30.0
   jpeg_quality: 85
+  # TCP에 오래된 프레임이 여러 장 쌓이지 않도록 송신 대기열을 제한합니다.
+  tcp_send_buffer_bytes: 131072
   frame_timeout_seconds: 1.0

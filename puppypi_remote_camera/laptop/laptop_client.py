@@ -27,6 +27,16 @@ from video_recorder import RecordingResult, VideoRecorder
 
 FRAME_HEADER = struct.Struct("!4sIQQHHH")
 FRAME_MAGIC = b"PRC1"
+MACOS_PHYSICAL_KEYS = {
+    0: "a",
+    1: "s",
+    2: "d",
+    12: "q",
+    13: "w",
+    14: "e",
+    15: "r",
+    49: "space",
+}
 
 
 class ControlClient:
@@ -264,8 +274,11 @@ class VideoReceiver:
         self._frame_timeout = float(config.get("video_frame_timeout_seconds", 1.0))
         self._reconnect_delay = float(config.get("reconnect_delay_seconds", 1.0))
         self._max_jpeg_bytes = int(config.get("max_jpeg_bytes", 20 * 1024 * 1024))
+        self._receive_buffer = int(config.get("tcp_receive_buffer_bytes", 131072))
         self._frame_handler = frame_handler
         self._disconnect_handler = disconnect_handler
+        if not 16384 <= self._receive_buffer <= 4 * 1024 * 1024:
+            raise ValueError("tcp_receive_buffer_bytes 범위 오류")
 
         self._running = threading.Event()
         self._lock = threading.Lock()
@@ -337,6 +350,11 @@ class VideoReceiver:
                 )
                 current_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 current_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                current_socket.setsockopt(
+                    socket.SOL_SOCKET,
+                    socket.SO_RCVBUF,
+                    self._receive_buffer,
+                )
                 current_socket.settimeout(self._frame_timeout)
                 with self._lock:
                     self._socket = current_socket
@@ -450,7 +468,7 @@ class LaptopApplication:
         self.config = config
         self.robot_ip = robot_ip
         self._closing = False
-        self._window_focused = True
+        self._window_focused = False
         self._pressed_motion = set()
         self._pressed_actions = set()
         self._motion_release_jobs = {}
@@ -498,6 +516,7 @@ class LaptopApplication:
             anchor=tk.CENTER,
         )
         self.video_label.pack(fill=tk.BOTH, expand=True)
+        self.video_label.bind("<Button-1>", self._take_keyboard_focus, add="+")
 
         status_frame = ttk.LabelFrame(main, text="상태", padding=8)
         status_frame.pack(fill=tk.X, pady=(8, 0))
@@ -505,6 +524,7 @@ class LaptopApplication:
             "connection": tk.StringVar(value="연결 대기"),
             "resolution": tk.StringVar(value="-"),
             "fps": tk.StringVar(value="-"),
+            "keyboard": tk.StringVar(value="포커스 대기 / 누른 이동 키 없음"),
             "command": tk.StringVar(value="정지 x=0.00, y=0.00, yaw=0.000"),
             "recording": tk.StringVar(value="녹화 안 함"),
             "duration": tk.StringVar(value="0.0초"),
@@ -515,6 +535,7 @@ class LaptopApplication:
             ("로봇 연결", "connection"),
             ("실제 해상도", "resolution"),
             ("실제 수신 FPS", "fps"),
+            ("키보드 입력", "keyboard"),
             ("현재 이동 명령", "command"),
             ("녹화 상태", "recording"),
             ("녹화 시간", "duration"),
@@ -581,10 +602,31 @@ class LaptopApplication:
 
     def _request_initial_focus(self):
         if not self._closing:
+            self.root.lift()
             self.root.focus_force()
 
+    def _take_keyboard_focus(self, _event=None):
+        if not self._closing:
+            self.root.focus_force()
+            self._window_focused = True
+            self._update_keyboard_status()
+
+    @staticmethod
+    def _normalized_key(event) -> str:
+        key = str(event.keysym).lower()
+        known = LaptopApplication.MOTION_KEYS | {"space", "e", "r", "q"}
+        if key in known:
+            return key
+        if sys.platform == "darwin":
+            return MACOS_PHYSICAL_KEYS.get(event.keycode, key)
+        return key
+
     def _on_key_press(self, event):
-        key = event.keysym.lower()
+        key = self._normalized_key(event)
+        self.status_vars["keyboard"].set(
+            "인식: %s (keysym=%s, keycode=%s)"
+            % (key.upper(), event.keysym, event.keycode)
+        )
         if key in self.MOTION_KEYS:
             release_job = self._motion_release_jobs.pop(key, None)
             if release_job is not None:
@@ -610,7 +652,7 @@ class LaptopApplication:
         return None
 
     def _on_key_release(self, event):
-        key = event.keysym.lower()
+        key = self._normalized_key(event)
         self._pressed_actions.discard(key)
         if key in self.MOTION_KEYS:
             previous_job = self._motion_release_jobs.pop(key, None)
@@ -634,6 +676,7 @@ class LaptopApplication:
 
     def _on_focus_in(self, _event):
         self._window_focused = True
+        self._update_keyboard_status()
         self._apply_motion()
 
     def _on_focus_out(self, _event):
@@ -654,6 +697,14 @@ class LaptopApplication:
             self._pressed_motion.clear()
             self._pressed_actions.clear()
             self.controller.safety_stop_burst()
+            self._update_keyboard_status()
+
+    def _update_keyboard_status(self):
+        pressed = "+".join(sorted(key.upper() for key in self._pressed_motion))
+        self.status_vars["keyboard"].set(
+            "포커스 %s / 누른 이동 키 %s"
+            % ("있음" if self._window_focused else "없음", pressed or "없음")
+        )
 
     def _motion_values(self) -> Tuple[float, float, str]:
         movement = self.config["movement"]
@@ -686,17 +737,25 @@ class LaptopApplication:
 
     def _apply_motion(self):
         x, yaw, name = self._motion_values()
-        enabled = (
-            self._window_focused
-            and self.receiver.has_fresh_frame()
-            and self.controller.control_alive
-            and not self.controller.robot_emergency
-        )
+        blocked = []
+        if not self._window_focused:
+            blocked.append("창 포커스 없음")
+        if not self.receiver.has_fresh_frame():
+            blocked.append("최신 영상 없음")
+        if not self.controller.control_alive:
+            blocked.append("제어 ACK 없음")
+        if self.controller.robot_emergency:
+            blocked.append("비상정지")
+        enabled = not blocked
         if not enabled:
             x = 0.0
             yaw = 0.0
-            name = "정지"
+            if self._pressed_motion:
+                name = "차단(%s)" % ", ".join(blocked)
+            else:
+                name = "정지"
         self.controller.set_motion(x, yaw, enabled)
+        self._update_keyboard_status()
         self.status_vars["command"].set(
             "%s x=%+.2f, y=0.00, yaw=%+.3f" % (name, x, yaw)
         )

@@ -10,6 +10,8 @@ network:
   video_frame_timeout_seconds: 1.0
   reconnect_delay_seconds: 1.0
   max_jpeg_bytes: 20971520
+  # TCP에 오래된 프레임이 여러 장 쌓이지 않도록 수신 대기열을 제한합니다.
+  tcp_receive_buffer_bytes: 131072
 
 movement:
   forward_cm_s: 5.0

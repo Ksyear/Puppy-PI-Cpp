@@ -215,6 +215,9 @@ class CameraStreamer:
         self._preferred_height = int(config["camera"].get("preferred_height", 1080))
         self._preferred_fps = float(config["camera"].get("preferred_fps", 30.0))
         self._jpeg_quality = int(config["camera"].get("jpeg_quality", 85))
+        self._send_buffer = int(
+            config["camera"].get("tcp_send_buffer_bytes", 131072)
+        )
         self._bind_address = str(config.get("bind_address", "0.0.0.0"))
         self._video_port = int(config["video_port"])
         self._frame_timeout = float(config["camera"].get("frame_timeout_seconds", 1.0))
@@ -225,6 +228,8 @@ class CameraStreamer:
             raise ValueError("video_port 범위 오류")
         if not 1 <= self._jpeg_quality <= 100:
             raise ValueError("jpeg_quality 범위는 1~100입니다")
+        if not 16384 <= self._send_buffer <= 4 * 1024 * 1024:
+            raise ValueError("tcp_send_buffer_bytes 범위 오류")
         if self._frame_timeout <= 0:
             raise ValueError("frame_timeout_seconds는 0보다 커야 합니다")
 
@@ -415,6 +420,11 @@ class CameraStreamer:
             try:
                 client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 client.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                client.setsockopt(
+                    socket.SOL_SOCKET,
+                    socket.SO_SNDBUF,
+                    self._send_buffer,
+                )
                 client.settimeout(2.0)
                 self._stream_client(client)
             except (OSError, TimeoutError) as exc:
