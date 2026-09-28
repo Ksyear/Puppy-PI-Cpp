@@ -1,0 +1,56 @@
+<launch>
+  <!-- Quest v2 스택 (ROS1 Noetic, 일반 Raspberry Pi 4 / Ubuntu Server 20.04 ARM64)
+
+       제어: Quest ==UDP 5001 JSON v2==> robot_server.py ==ACK==> Quest
+             기본은 모터 없는 시험 모드(/puppypi_remote_camera/test_velocity).
+       영상: usb_cam(카메라 유일 점유) -> /usb_cam/image_raw/compressed
+             -> camera_udp_sender ==UDP 5006 JPEG 청크==> Quest
+
+       기존 5005 문자열 조종기(vr_udp_teleop)는 넣지 않는다. 같은 모터 토픽에
+       동시에 발행하지 않도록 noetic_fallback 의 vr_control.launch / run_vr.sh 와
+       함께 실행하지 않는다. 직접 roslaunch 하기보다 robot/start_quest_v2.sh 를 쓴다
+       (카메라 경로 해석, 중복 실행·카메라 점유 검사, ROS_PACKAGE_PATH 설정). -->
+
+  <arg name="config" default="$(find puppypi_remote_camera)/config/robot_config.yaml"/>
+  <!-- 실제 모드는 config 의 enable_motor_control: true 와 이 인자가 모두 필요 -->
+  <arg name="confirm_motor_control" default="false"/>
+
+  <arg name="use_camera" default="true"/>
+  <arg name="video_device" default=""/>     <!-- start_quest_v2.sh 가 camera.name_contains 로 채움 -->
+  <arg name="image_width" default="640"/>
+  <arg name="image_height" default="480"/>
+  <arg name="pixel_format" default="mjpeg"/>
+  <arg name="framerate" default="30"/>
+  <arg name="video_max_fps" default="15"/>
+  <arg name="quest_ip" default=""/>         <!-- '' = Quest 가 5006 으로 보내는 hello 로 목적지 자동 등록 -->
+  <arg name="use_status" default="false"/>  <!-- UDP 5007 RSSI/가동시간 문자열 (선택) -->
+
+  <node unless="$(arg confirm_motor_control)" name="puppypi_v2_control"
+        pkg="puppypi_remote_camera" type="robot_server.py" output="screen" required="true"
+        args="--config $(arg config) --non-interactive"/>
+  <node if="$(arg confirm_motor_control)" name="puppypi_v2_control"
+        pkg="puppypi_remote_camera" type="robot_server.py" output="screen" required="true"
+        args="--config $(arg config) --non-interactive --confirm-motor-control"/>
+
+  <group if="$(arg use_camera)">
+    <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen">
+      <param name="video_device" value="$(arg video_device)"/>
+      <param name="image_width" value="$(arg image_width)"/>
+      <param name="image_height" value="$(arg image_height)"/>
+      <param name="pixel_format" value="$(arg pixel_format)"/>
+      <param name="framerate" value="$(arg framerate)"/>
+      <param name="io_method" value="mmap"/>
+      <param name="camera_frame_id" value="usb_cam"/>
+    </node>
+
+    <node name="camera_udp_sender" pkg="puppy_vr_control_noetic"
+          type="camera_udp_sender.py" output="screen">
+      <param name="image_topic" value="/usb_cam/image_raw/compressed"/>
+      <param name="client_ip" value="$(arg quest_ip)"/>
+      <param name="max_fps" value="$(arg video_max_fps)"/>
+    </node>
+  </group>
+
+  <node if="$(arg use_status)" name="robot_status_sender" pkg="puppy_vr_control_noetic"
+        type="robot_status_sender.py" output="screen"/>
+</launch>

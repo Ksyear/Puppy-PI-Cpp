@@ -1,8 +1,15 @@
 # 실제 모터 시험 전까지 반드시 false로 유지하십시오.
+# false(시험 모드): 제조사 puppy_control 없이 시작하고, go_home을 호출하지 않으며,
+#   test_topic에 geometry_msgs/TwistStamped(SI: m/s, rad/s)만 발행합니다.
+# true(실제 모드): 제조사 puppy_control/Velocity(x·y cm/s, yaw_rate rad/s)를
+#   motor_topic에 발행합니다. 추가로 --confirm-motor-control 또는 대화형
+#   ENABLE MOTORS 확인이 필요합니다.
 enable_motor_control: false
 
 motor_topic: /puppy_control/velocity/autogait
 test_topic: /puppypi_remote_camera/test_velocity
+# 제어기 상태(std_msgs/String JSON, latch). 시험·실제 모드 공통입니다.
+state_topic: /puppypi_remote_camera/control_state
 
 # 실제 모터 제어가 활성화된 경우에만 시작 전에 다리를 펴는 서비스입니다.
 stand_on_start: true
@@ -12,15 +19,29 @@ stand_service_timeout_seconds: 15.0
 bind_address: 0.0.0.0
 video_port: 5000
 control_port: 5001
-protocol_version: 1
+# 2: Quest v2 (forward/turn 정규화 입력). 1: 기존 노트북 v1 (x/yaw_rate + timestamp).
+# 한 번에 하나만 해석합니다. 노트북 v1은 1로 바꾸고 tcp_video_enabled도 true로 바꿉니다.
+protocol_version: 2
+# true면 이 서버가 카메라를 직접 열어 TCP 5000으로 보냅니다(노트북 v1 전용).
+# Quest v2 영상은 usb_cam + camera_udp_sender(UDP 5006)가 카메라를 점유하므로
+# protocol_version 2에서는 false여야 합니다(서버가 시작 시 검사).
+tcp_video_enabled: false
 
+# 마지막으로 인정한 유효 command 이후 이 시간 안에 새 command가 없으면 정지합니다.
 # 검사 스레드 scheduling 지연을 포함해 0.3초 안에 정지하도록 0.25초로 둡니다.
 command_timeout_seconds: 0.25
+# 조종자 패킷이 이 시간 동안 없으면 소유권을 해제합니다.
 client_lease_timeout_seconds: 1.0
+# v1 전용: 송신 timestamp 나이 검사. v2는 timestamp를 쓰지 않습니다.
+# v2의 '지연됐지만 sequence가 증가한 패킷' 신선도 정책은 미합의 상태이며
+# 실제 모터 적용 전에 결정해야 합니다(README '미합의 정책').
 max_packet_age_seconds: 0.3
 max_future_seconds: 1.0
 stop_repetitions: 5
 
+# v2 변환: forward>=0 -> x = forward*max_forward, forward<0 -> x = forward*max_reverse,
+# yaw_rate = turn*max_yaw_rate, y = 0. 변환 뒤에도 이 상한으로 한 번 더 제한합니다.
+# 초기 시험값이며 로봇의 물리적 최대 성능이 아닙니다.
 velocity_limits:
   max_forward_cm_s: 5.0
   max_reverse_cm_s: 3.0
@@ -28,8 +49,10 @@ velocity_limits:
 
 camera:
   # v4l2-ctl --list-devices 또는 /dev/v4l/by-id에 나타나는 식별 문자열입니다.
-  # 일치하는 이름이 없으면 서버는 다른 카메라로 임의 대체하지 않고 종료합니다.
+  # 일치하는 이름이 없으면 다른 카메라로 임의 대체하지 않고 종료합니다.
+  # Quest v2 경로에서도 start_quest_v2.sh가 이 값으로 usb_cam 장치를 찾습니다.
   name_contains: NV50-HD220S
+  # 아래 값은 노트북 v1(TCP 5000) 경로 전용입니다.
   preferred_width: 1920
   preferred_height: 1080
   preferred_fps: 30.0

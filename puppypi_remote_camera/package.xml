@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>puppypi_remote_camera</name>
+  <version>0.2.0</version>
+  <description>
+    ROS1 Noetic PuppyPi 원격 조종 서버. UDP 5001 JSON v2(Quest forward/turn)와
+    기존 노트북 v1을 설정으로 하나만 선택합니다. 기본값은 모터 없는 시험 모드이며
+    제조사 puppy_control 패키지 없이 시작합니다. 순수 rospy 패키지라 catkin 빌드
+    없이 ROS_PACKAGE_PATH 등록만으로 roslaunch에서 찾습니다(robot/start_quest_v2.sh).
+  </description>
+  <maintainer email="ksyear@users.noreply.github.com">Ksyear</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>rosgraph</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>usb_cam</exec_depend>
+  <exec_depend>compressed_image_transport</exec_depend>
+  <!-- puppy_control(제조사)은 enable_motor_control: true인 실제 모드에서만 필요합니다. -->
+</package>

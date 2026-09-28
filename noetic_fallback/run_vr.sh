@@ -25,6 +25,15 @@ fi
 export ROS_PACKAGE_PATH="$ROS_PACKAGE_PATH:$DIR"
 chmod +x "$DIR/puppy_vr_control_noetic/scripts/"*.py
 
+# UDP 5001 v2 제어 서버와 동시에 /puppy_control/velocity/autogait 를 조종하지 않는다.
+# (아래 pkill 이 v2 스택의 camera_udp_sender 까지 끄지 않도록 먼저 검사)
+if pgrep -f 'robot_server.py' >/dev/null 2>&1; then
+  echo "[오류] UDP 5001 v2 제어 서버(robot_server.py)가 실행 중입니다." >&2
+  echo "  5005 vr_udp_teleop 과 동시에 실행하지 않습니다. v2 스택을 먼저 종료하십시오" >&2
+  echo "  (start_quest_v2.sh 터미널에서 Ctrl+C)." >&2
+  exit 4
+fi
+
 # 이전 인스턴스 정리 (roslaunch 든 직접 실행이든)
 pkill -f 'puppy_vr_control_noetic' 2>/dev/null || true
 sleep 0.5

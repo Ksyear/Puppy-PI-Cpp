@@ -56,6 +56,12 @@ push 전에는 `bash tools/check_public_tree.sh`를 실행해 금지 파일이 G
 
 ## 빠른 시작 (로봇에서)
 
+> **ROS1 Noetic + Quest v2 경로 (일반 Raspberry Pi 4, Ubuntu Server 20.04 ARM64):**
+> [puppypi_remote_camera/README.md](./puppypi_remote_camera/README.md)를 따르십시오.
+> 제어는 UDP 5001 JSON v2, 영상은 UDP 5006이며 기본은 모터 없는 시험 모드입니다.
+> 이 경로에서는 아래 ROS2용 `setup_from_scratch.sh`, `build_all.sh`, CMake
+> `robot` target과 Docker를 사용하지 않습니다.
+
 > **현재 전환 경로**: 기존 ROS1 Noetic 저장장치는 정상 동작 기준과 비공개 엔진
 > 백업용으로 보존합니다. 새 USB에 Ubuntu Server 22.04 64-bit를 설치하고 아래
 > CMake target으로 ROS2 Humble, LD19 driver, 의존성과 workspace를 구성합니다.

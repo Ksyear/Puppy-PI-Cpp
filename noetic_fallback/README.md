@@ -10,6 +10,14 @@ ROS2 환경이 완성되면 이 폴더는 사용하지 않습니다.
   (`/puppy_control/velocity/autogait`, `puppy_control/Velocity` — ros1 브랜치 원본으로 검증)
 - 카메라 토픽만 다름: ROS1 은 `/usb_cam/image_raw/compressed` (기본값 반영됨)
 
+> **UDP 5001 JSON v2와 배타 실행:** 여기의 `vr_udp_teleop`(UDP 5005 문자열)은
+> 레거시 조종기입니다. Quest v2 스택
+> ([puppypi_remote_camera/README.md](../puppypi_remote_camera/README.md),
+> `start_quest_v2.sh`)과 같은 `/puppy_control/velocity/autogait`·카메라를 쓰므로
+> 동시에 실행하지 않습니다. `run_vr.sh`는 `robot_server.py`가 실행 중이면 시작을
+> 거부하고, `start_quest_v2.sh`는 `vr_udp_teleop`가 실행 중이면 거부합니다.
+> v2 스택은 이 패키지의 `camera_udp_sender.py`(5006)를 그대로 재사용합니다.
+
 ## 실제 로봇 접속 (Hiwonder 이미지의 네트워크 모드)
 
 부팅하면 로봇이 자체 핫스팟(AP)을 켠다: SSID `HW-XXXXXXXX`, 비밀번호 기본 `hiwonder`,
