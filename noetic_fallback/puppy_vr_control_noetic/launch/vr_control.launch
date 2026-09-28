@@ -1,5 +1,7 @@
 <launch>
   <!-- [비상용 3안] ROS1 Noetic 이미지에서 VR 조종+영상+상태 전송 -->
+  <!-- 레거시 UDP 5005 문자열 조종. puppypi_remote_camera/launch/quest_v2.launch
+       (UDP 5001 JSON v2)와 같은 모터 토픽·카메라를 쓰므로 동시에 실행하지 않는다. -->
   <!-- 사전 조건: 로봇 기본 노드(puppy_control 등, 부팅 자동실행) + 카메라:
        roslaunch puppy_bringup usb_cam.launch -->
   <arg name="use_camera" default="true"/>
