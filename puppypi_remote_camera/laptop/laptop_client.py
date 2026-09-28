@@ -471,7 +471,6 @@ class LaptopApplication:
         self._window_focused = False
         self._pressed_motion = set()
         self._pressed_actions = set()
-        self._motion_release_jobs = {}
         self._last_display_sequence = -1
         self._last_video_connected = False
         self._first_display_logged = False
@@ -628,9 +627,6 @@ class LaptopApplication:
             % (key.upper(), event.keysym, event.keycode)
         )
         if key in self.MOTION_KEYS:
-            release_job = self._motion_release_jobs.pop(key, None)
-            if release_job is not None:
-                self.root.after_cancel(release_job)
             self._pressed_motion.add(key)
             self._apply_motion()
             return "break"
@@ -655,24 +651,12 @@ class LaptopApplication:
         key = self._normalized_key(event)
         self._pressed_actions.discard(key)
         if key in self.MOTION_KEYS:
-            previous_job = self._motion_release_jobs.pop(key, None)
-            if previous_job is not None:
-                self.root.after_cancel(previous_job)
-            self._motion_release_jobs[key] = self.root.after(
-                40,
-                lambda released_key=key: self._finish_motion_release(
-                    released_key
-                ),
-            )
+            self._pressed_motion.discard(key)
+            self._apply_motion()
+            if not self._pressed_motion:
+                self.controller.immediate_stop(2)
             return "break"
         return None
-
-    def _finish_motion_release(self, key: str):
-        self._motion_release_jobs.pop(key, None)
-        self._pressed_motion.discard(key)
-        self._apply_motion()
-        if not self._pressed_motion:
-            self.controller.immediate_stop(2)
 
     def _on_focus_in(self, _event):
         self._window_focused = True
@@ -691,9 +675,6 @@ class LaptopApplication:
             focused_widget = None
         if focused_widget is None:
             self._window_focused = False
-            for release_job in self._motion_release_jobs.values():
-                self.root.after_cancel(release_job)
-            self._motion_release_jobs.clear()
             self._pressed_motion.clear()
             self._pressed_actions.clear()
             self.controller.safety_stop_burst()
@@ -740,8 +721,8 @@ class LaptopApplication:
         blocked = []
         if not self._window_focused:
             blocked.append("창 포커스 없음")
-        if not self.receiver.has_fresh_frame():
-            blocked.append("최신 영상 없음")
+        if not self.receiver.connected or self.receiver.snapshot() is None:
+            blocked.append("영상 연결 없음")
         if not self.controller.control_alive:
             blocked.append("제어 ACK 없음")
         if self.controller.robot_emergency:
@@ -871,8 +852,6 @@ class LaptopApplication:
             if sequence != self._last_display_sequence:
                 self._last_display_sequence = sequence
                 self._show_frame(frame)
-            if time.monotonic() - received_at > 0.5:
-                self.controller.safety_stop_burst()
 
         if self.receiver.has_fresh_frame():
             video_state = "영상 정상"
@@ -932,9 +911,6 @@ class LaptopApplication:
         if self._closing:
             return
         self._closing = True
-        for release_job in self._motion_release_jobs.values():
-            self.root.after_cancel(release_job)
-        self._motion_release_jobs.clear()
         self._pressed_motion.clear()
         self.controller.safety_stop_burst()
         if self.recorder.is_recording:

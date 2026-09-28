@@ -203,10 +203,14 @@ class RemoteControlServer:
         LOGGER.info("조종 UDP 수신: %s:%d", self._bind_address, self._port)
 
     def set_video_client(self, client_ip: str):
-        """Authorize control packets only from the currently streaming laptop."""
+        """Prefer the streaming laptop IP without coupling both connections."""
         with self._lock:
             self._video_client_ip = client_ip
-            self._clear_owner_locked()
+            if (
+                self._owner_address is not None
+                and self._owner_address[0] != client_ip
+            ):
+                self._clear_owner_locked()
         self._publish_stop()
         LOGGER.warning("안전 정지: 영상 클라이언트 연결 변경")
         LOGGER.info("제어 허용 노트북 IP: %s", client_ip)
@@ -215,7 +219,8 @@ class RemoteControlServer:
         with self._lock:
             if self._video_client_ip == client_ip:
                 self._video_client_ip = None
-                self._clear_owner_locked()
+                self._last_command_rx = 0.0
+                self._watchdog_stopped = True
         self._publish_stop()
         LOGGER.warning("영상 연결 종료: %s; 로봇 정지", client_ip)
 
@@ -275,7 +280,10 @@ class RemoteControlServer:
             accepted_reason = "ok"
             now_mono = time.monotonic()
             with self._lock:
-                if self._video_client_ip is None or address[0] != self._video_client_ip:
+                if (
+                    self._video_client_ip is not None
+                    and address[0] != self._video_client_ip
+                ):
                     raise PacketError("현재 영상 클라이언트 IP가 아님")
 
                 if self._owner_id is None:
